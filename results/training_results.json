@@ -1,0 +1,62 @@
+[
+  {
+    "model": "SVM",
+    "cv_accuracy": 0.853,
+    "time": 6.3483726978302,
+    "feature": "Correlogram",
+    "color_space": "HSV",
+    "best_params": {
+      "svm__C": "10",
+      "svm__gamma": "scale",
+      "svm__kernel": "rbf"
+    }
+  },
+  {
+    "model": "KNN",
+    "cv_accuracy": 0.7979999999999999,
+    "time": 1.5760416984558105,
+    "feature": "Correlogram",
+    "color_space": "HSV",
+    "best_params": {
+      "knn__metric": "manhattan",
+      "knn__n_neighbors": "5",
+      "knn__weights": "distance"
+    }
+  },
+  {
+    "model": "Random Forest",
+    "cv_accuracy": 0.852,
+    "time": 5.543652772903442,
+    "feature": "Correlogram",
+    "color_space": "HSV",
+    "best_params": {
+      "rf__max_depth": "20",
+      "rf__min_samples_split": "2",
+      "rf__n_estimators": "200"
+    }
+  },
+  {
+    "model": "SVM",
+    "cv_accuracy": 0.795,
+    "time": 0.5497028827667236,
+    "feature": "Histogram",
+    "color_space": "HSV",
+    "best_params": {
+      "svm__C": "10",
+      "svm__gamma": "0.001",
+      "svm__kernel": "rbf"
+    }
+  },
+  {
+    "model": "SVM",
+    "cv_accuracy": 0.829,
+    "time": 0.913095235824585,
+    "feature": "Correlogram",
+    "color_space": "RGB",
+    "best_params": {
+      "svm__C": "10",
+      "svm__gamma": "0.001",
+      "svm__kernel": "rbf"
+    }
+  }
+]

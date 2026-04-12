@@ -1,0 +1,250 @@
+"""
+color_correlogram.py - Cai dat thuat toan Color Auto-Correlogram
+
+Tham khao: Huang et al. (1997) "Image Indexing Using Color Correlograms"
+
+Auto-correlogram do xac suat 2 pixel CUNG MAU o khoang cach d:
+    alpha(c, d) = Pr[p2 thuoc I_c | p1 thuoc I_c, |p1 - p2| = d]
+
+Trong do:
+    - c: ma mau (sau luong tu hoa)
+    - d: khoang cach giua 2 pixel
+    - I_c: tap cac pixel co mau c trong anh
+"""
+
+import numpy as np
+
+
+def auto_correlogram(quantized_img, n_colors, distances=None):
+    """Tinh Auto-Correlogram cho 1 anh da luong tu hoa.
+
+    Su dung numpy array shifting de toi uu toc do (vectorized).
+    KHONG dung vong for duyet tung pixel.
+
+    Args:
+        quantized_img: Ma tran 2D (H x W), moi pixel la ma mau (0 -> n_colors-1)
+        n_colors: Tong so mau sau luong tu hoa
+        distances: List cac khoang cach d can tinh. Mac dinh [1, 3, 5, 7]
+
+    Returns:
+        feature: Vector dac trung 1 chieu, kich thuoc (n_colors * len(distances),)
+    """
+    if distances is None:
+        distances = [1, 3, 5, 7]
+
+    h, w = quantized_img.shape
+    correlogram = np.zeros((n_colors, len(distances)), dtype=np.float64)
+
+    # Dem so pixel cua moi mau
+    color_count = np.zeros(n_colors, dtype=np.float64)
+    for c in range(n_colors):
+        color_count[c] = np.sum(quantized_img == c)
+
+    for d_idx, d in enumerate(distances):
+        # 8 huong lan can o khoang cach d
+        # (dy, dx) tuong ung voi 8 huong xung quanh
+        shifts = [
+            (-d, -d), (-d, 0), (-d, d),
+            (0, -d),           (0, d),
+            (d, -d),  (d, 0),  (d, d)
+        ]
+
+        # Dem so lan match cho moi mau
+        match_count = np.zeros(n_colors, dtype=np.float64)
+        neighbor_count = np.zeros(n_colors, dtype=np.float64)
+
+        for dy, dx in shifts:
+            # Xac dinh vung giao nhau giua anh goc va anh dich chuyen
+            # Anh goc: quantized_img[y1_src:y2_src, x1_src:x2_src]
+            # Anh dich chuyen: quantized_img[y1_dst:y2_dst, x1_dst:x2_dst]
+
+            y1_src = max(0, -dy)
+            y2_src = min(h, h - dy)
+            x1_src = max(0, -dx)
+            x2_src = min(w, w - dx)
+
+            y1_dst = y1_src + dy
+            y2_dst = y2_src + dy
+            x1_dst = x1_src + dx
+            x2_dst = x2_src + dx
+
+            if y2_src <= y1_src or x2_src <= x1_src:
+                continue
+
+            center = quantized_img[y1_src:y2_src, x1_src:x2_src]
+            neighbor = quantized_img[y1_dst:y2_dst, x1_dst:x2_dst]
+
+            # So sanh: pixel trung tam va pixel lan can co cung mau khong?
+            match = (center == neighbor)
+
+            # Dem cho tung mau
+            for c in range(n_colors):
+                mask = (center == c)
+                count = np.sum(mask)
+                if count > 0:
+                    neighbor_count[c] += count
+                    match_count[c] += np.sum(match[mask])
+
+        # Tinh xac suat: alpha(c, d) = match / neighbor
+        for c in range(n_colors):
+            if neighbor_count[c] > 0:
+                correlogram[c, d_idx] = match_count[c] / neighbor_count[c]
+
+    # Ghep thanh vector 1 chieu
+    feature = correlogram.flatten()
+
+    return feature
+
+
+def auto_correlogram_fast(quantized_img, n_colors, distances=None):
+    """Phien ban toi uu hon cua auto_correlogram.
+
+    Thay vi lap qua tung mau, su dung one-hot encoding va phep nhan ma tran.
+    Nhanh hon dang ke voi so luong mau lon.
+
+    Args:
+        quantized_img: Ma tran 2D (H x W)
+        n_colors: Tong so mau
+        distances: List khoang cach
+
+    Returns:
+        feature: Vector dac trung 1 chieu
+    """
+    if distances is None:
+        distances = [1, 3, 5, 7]
+
+    h, w = quantized_img.shape
+    correlogram = np.zeros((n_colors, len(distances)), dtype=np.float64)
+
+    for d_idx, d in enumerate(distances):
+        shifts = [
+            (-d, -d), (-d, 0), (-d, d),
+            (0, -d),           (0, d),
+            (d, -d),  (d, 0),  (d, d)
+        ]
+
+        total_match = np.zeros(n_colors, dtype=np.float64)
+        total_count = np.zeros(n_colors, dtype=np.float64)
+
+        for dy, dx in shifts:
+            y1_src = max(0, -dy)
+            y2_src = min(h, h - dy)
+            x1_src = max(0, -dx)
+            x2_src = min(w, w - dx)
+
+            if y2_src <= y1_src or x2_src <= x1_src:
+                continue
+
+            center = quantized_img[y1_src:y2_src, x1_src:x2_src].ravel()
+            neighbor = quantized_img[y1_src + dy:y2_src + dy,
+                                     x1_src + dx:x2_src + dx].ravel()
+
+            match = (center == neighbor)
+
+            # Dem nhanh bang bincount
+            total_count += np.bincount(center, minlength=n_colors).astype(np.float64)
+            total_match += np.bincount(center[match], minlength=n_colors).astype(np.float64)
+
+        # Tinh xac suat
+        valid = total_count > 0
+        correlogram[valid, d_idx] = total_match[valid] / total_count[valid]
+
+    return correlogram.flatten()
+
+
+def extract_correlogram_feature(img_bgr, color_space='hsv',
+                                 h_bins=8, s_bins=3, v_bins=3,
+                                 rgb_bins=4, distances=None):
+    """Ham tien ich: tu anh BGR goc -> vector dac trung correlogram.
+
+    Args:
+        img_bgr: Anh BGR (numpy array)
+        color_space: 'hsv' hoac 'rgb'
+        h_bins, s_bins, v_bins: So bin cho HSV
+        rgb_bins: So bin cho RGB
+        distances: List khoang cach
+
+    Returns:
+        feature: Vector dac trung 1 chieu
+    """
+    import cv2
+
+    if color_space == 'hsv':
+        img_hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        n_colors = h_bins * s_bins * v_bins
+
+        h = img_hsv[:, :, 0].astype(np.int32)
+        s = img_hsv[:, :, 1].astype(np.int32)
+        v = img_hsv[:, :, 2].astype(np.int32)
+        h_q = np.clip(h * h_bins // 180, 0, h_bins - 1).astype(np.int32)
+        s_q = np.clip(s * s_bins // 256, 0, s_bins - 1).astype(np.int32)
+        v_q = np.clip(v * v_bins // 256, 0, v_bins - 1).astype(np.int32)
+        quantized = h_q * (s_bins * v_bins) + s_q * v_bins + v_q
+
+    elif color_space == 'rgb':
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        n_colors = rgb_bins ** 3
+
+        r = np.clip(img_rgb[:, :, 0].astype(np.int32) * rgb_bins // 256, 0, rgb_bins - 1).astype(np.int32)
+        g = np.clip(img_rgb[:, :, 1].astype(np.int32) * rgb_bins // 256, 0, rgb_bins - 1).astype(np.int32)
+        b = np.clip(img_rgb[:, :, 2].astype(np.int32) * rgb_bins // 256, 0, rgb_bins - 1).astype(np.int32)
+        quantized = r * (rgb_bins * rgb_bins) + g * rgb_bins + b
+    else:
+        raise ValueError(f"color_space phai la 'hsv' hoac 'rgb', khong phai '{color_space}'")
+
+    return auto_correlogram_fast(quantized, n_colors, distances)
+
+
+if __name__ == "__main__":
+    # Test nhanh voi 1 anh
+    import cv2
+    import sys
+    import time
+
+    if len(sys.argv) > 1:
+        img_path = sys.argv[1]
+    else:
+        print("Su dung: python color_correlogram.py <duong_dan_anh>")
+        print("Dang tao anh test ngau nhien...")
+        # Tao anh test
+        img = np.random.randint(0, 256, (128, 128, 3), dtype=np.uint8)
+        img_path = None
+
+    if img_path:
+        img = cv2.imread(img_path)
+        img = cv2.resize(img, (128, 128))
+
+    print(f"Kich thuoc anh: {img.shape}")
+
+    # Test phien ban thuong
+    start = time.time()
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h = img_hsv[:, :, 0].astype(np.int32)
+    s = img_hsv[:, :, 1].astype(np.int32)
+    v = img_hsv[:, :, 2].astype(np.int32)
+    h_q = np.clip(h * 8 // 180, 0, 7).astype(np.int32)
+    s_q = np.clip(s * 3 // 256, 0, 2).astype(np.int32)
+    v_q = np.clip(v * 3 // 256, 0, 2).astype(np.int32)
+    quantized = h_q * 9 + s_q * 3 + v_q
+
+    feat1 = auto_correlogram(quantized, 72)
+    t1 = time.time() - start
+    print(f"auto_correlogram:      {t1:.3f}s, vector size: {feat1.shape}")
+
+    # Test phien ban nhanh
+    start = time.time()
+    feat2 = auto_correlogram_fast(quantized, 72)
+    t2 = time.time() - start
+    print(f"auto_correlogram_fast: {t2:.3f}s, vector size: {feat2.shape}")
+
+    # Test ham tien ich
+    start = time.time()
+    feat3 = extract_correlogram_feature(img, color_space='hsv')
+    t3 = time.time() - start
+    print(f"extract_feature (HSV): {t3:.3f}s, vector size: {feat3.shape}")
+
+    feat4 = extract_correlogram_feature(img, color_space='rgb')
+    print(f"extract_feature (RGB): vector size: {feat4.shape}")
+
+    print(f"\nToc do cai thien: {t1/t2:.1f}x")
+    print(f"Vector HSV: min={feat3.min():.4f}, max={feat3.max():.4f}, mean={feat3.mean():.4f}")

@@ -1,0 +1,23 @@
+=== Correlogram_HSV_KNN ===
+
+Accuracy:  0.7980
+Precision: 0.8192
+Recall:    0.7980
+F1-Score:  0.7926
+
+              precision    recall  f1-score   support
+
+    africans       0.82      0.84      0.83       100
+     beaches       0.66      0.41      0.51       100
+   buildings       0.51      0.91      0.65       100
+       buses       0.91      0.78      0.84       100
+   dinosaurs       0.81      1.00      0.89       100
+   elephants       0.79      0.77      0.78       100
+     flowers       0.98      0.94      0.96       100
+        food       0.91      0.89      0.90       100
+      horses       0.97      0.99      0.98       100
+   mountains       0.83      0.45      0.58       100
+
+    accuracy                           0.80      1000
+   macro avg       0.82      0.80      0.79      1000
+weighted avg       0.82      0.80      0.79      1000

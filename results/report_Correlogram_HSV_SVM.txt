@@ -1,0 +1,23 @@
+=== Correlogram_HSV_SVM ===
+
+Accuracy:  0.8530
+Precision: 0.8560
+Recall:    0.8530
+F1-Score:  0.8528
+
+              precision    recall  f1-score   support
+
+    africans       0.80      0.87      0.83       100
+     beaches       0.69      0.61      0.65       100
+   buildings       0.83      0.83      0.83       100
+       buses       0.95      0.88      0.91       100
+   dinosaurs       0.99      1.00      1.00       100
+   elephants       0.86      0.80      0.83       100
+     flowers       0.88      0.98      0.93       100
+        food       0.92      0.81      0.86       100
+      horses       0.98      0.97      0.97       100
+   mountains       0.67      0.78      0.72       100
+
+    accuracy                           0.85      1000
+   macro avg       0.86      0.85      0.85      1000
+weighted avg       0.86      0.85      0.85      1000
