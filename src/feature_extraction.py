@@ -19,7 +19,7 @@ from color_correlogram import auto_correlogram_fast
 from color_histogram import color_histogram
 
 
-def extract_all_features(images, method='correlogram', color_space='hsv',
+def extract_all_features(images, method='correlogram', color_space='rgb',
                           h_bins=8, s_bins=3, v_bins=3, rgb_bins=4,
                           distances=None):
     """Trich xuat dac trung cho danh sach anh.
@@ -114,17 +114,25 @@ def main():
     print(f"  Xong! {t_corr_rgb:.1f}s, shape: {X_corr_rgb.shape}")
 
     # Trich xuat Histogram HSV
-    print("\n[4/5] Trich xuat Color Histogram (HSV)...")
+    print("\n[4/6] Trich xuat Color Histogram (HSV)...")
     start = time.time()
     X_hist_hsv = extract_all_features(images, method='histogram', color_space='hsv')
     t_hist_hsv = time.time() - start
     print(f"  Xong! {t_hist_hsv:.1f}s, shape: {X_hist_hsv.shape}")
 
+    # Trich xuat Histogram RGB
+    print("\n[5/6] Trich xuat Color Histogram (RGB)...")
+    start = time.time()
+    X_hist_rgb = extract_all_features(images, method='histogram', color_space='rgb')
+    t_hist_rgb = time.time() - start
+    print(f"  Xong! {t_hist_rgb:.1f}s, shape: {X_hist_rgb.shape}")
+
     # Luu tat ca
-    print("\n[5/5] Luu ket qua...")
+    print("\n[6/6] Luu ket qua...")
     np.save(features_dir / "correlogram_hsv.npy", X_corr_hsv)
     np.save(features_dir / "correlogram_rgb.npy", X_corr_rgb)
     np.save(features_dir / "histogram_hsv.npy", X_hist_hsv)
+    np.save(features_dir / "histogram_rgb.npy", X_hist_rgb)
     np.save(features_dir / "labels.npy", y)
     np.save(features_dir / "class_names.npy", class_names)
     np.save(features_dir / "image_paths.npy", np.array(paths))
@@ -133,6 +141,7 @@ def main():
     print(f"  - correlogram_hsv.npy: {X_corr_hsv.shape}")
     print(f"  - correlogram_rgb.npy: {X_corr_rgb.shape}")
     print(f"  - histogram_hsv.npy:   {X_hist_hsv.shape}")
+    print(f"  - histogram_rgb.npy:   {X_hist_rgb.shape}")
     print(f"  - labels.npy:          {y.shape}")
     print(f"  - class_names.npy:     {class_names.shape}")
 

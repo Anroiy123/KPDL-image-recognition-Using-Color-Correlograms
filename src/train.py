@@ -44,13 +44,14 @@ def load_features(features_dir):
     return data
 
 
-def train_svm(X, y, cv=5):
+def train_svm(X, y, cv=5, n_jobs=-1):
     """Huan luyen SVM voi GridSearchCV.
 
     Args:
         X: Ma tran dac trung
         y: Vector nhan
         cv: So fold cross-validation
+        n_jobs: So process song song cho GridSearchCV
 
     Returns:
         best_model: Pipeline (Scaler + SVM) tot nhat
@@ -72,7 +73,7 @@ def train_svm(X, y, cv=5):
         pipeline, param_grid,
         cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=42),
         scoring='accuracy',
-        n_jobs=-1,
+        n_jobs=n_jobs,
         verbose=1
     )
 
@@ -92,7 +93,7 @@ def train_svm(X, y, cv=5):
     }
 
 
-def train_knn(X, y, cv=5):
+def train_knn(X, y, cv=5, n_jobs=-1):
     """Huan luyen KNN voi GridSearchCV.
 
     Returns:
@@ -115,7 +116,7 @@ def train_knn(X, y, cv=5):
         pipeline, param_grid,
         cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=42),
         scoring='accuracy',
-        n_jobs=-1,
+        n_jobs=n_jobs,
         verbose=1
     )
 
