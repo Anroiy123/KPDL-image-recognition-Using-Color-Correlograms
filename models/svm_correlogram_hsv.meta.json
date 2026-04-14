@@ -5,26 +5,19 @@
   "color_space": "HSV",
   "model": "SVM",
   "best_params": {
-    "svm__C": "10",
+    "svm__C": "100",
     "svm__gamma": "0.001",
     "svm__kernel": "rbf"
   },
   "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
   "split_counts": {
-    "train": 699,
-    "val": 150,
-    "test": 151
+    "train": 800,
+    "test": 200
   },
   "tuning_split": "train",
-  "validation_split": "val",
-  "final_training_split": "train+val",
+  "tuning_method": "stratified_kfold_cv_on_train",
+  "final_training_split": "train",
   "held_out_test_split": "test",
-  "retrieval_split": "train+val",
-  "train_cv_accuracy": 0.8455190133607399,
-  "validation_summary": {
-    "accuracy": 0.8533333333333334,
-    "precision": 0.8646590909090909,
-    "recall": 0.8533333333333333,
-    "f1_score": 0.8527327869263353
-  }
+  "retrieval_split": "train",
+  "train_cv_accuracy": 0.85
 }

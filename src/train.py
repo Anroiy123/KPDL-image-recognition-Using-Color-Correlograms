@@ -1,13 +1,13 @@
 """
-train.py - Huan luyen cac mo hinh hoc may voi split train/val/test co dinh.
+train.py - Huan luyen cac mo hinh hoc may voi split train/test co dinh.
 
 Quy uoc:
-- Tune hyperparameter tren train split
-- Do chat luong tam thoi tren val split
-- Refit model cuoi tren train+val de luu cho app
+- Tune hyperparameter bang cross-validation chi tren train split
+- Luu model cuoi tren toan bo train split
 - Khong dung test split trong huan luyen
 """
 
+import argparse
 import json
 import os
 import time
@@ -15,21 +15,21 @@ from pathlib import Path
 
 import joblib
 import numpy as np
-from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from dataset_split import (
-    DEFAULT_SPLIT_FILENAME,
-    load_split_metadata,
-    merge_split_indices,
-    resolve_split_indices,
+from dataset_profile import (
+    DEFAULT_DATASET_PROFILE,
+    list_dataset_profiles,
+    resolve_dataset_profile,
+    resolve_scoped_or_legacy_path,
+    scoped_artifact_name,
 )
+from dataset_split import load_split_metadata, resolve_split_indices, validate_split_metadata
 
 
 EXPERIMENTS = [
@@ -84,11 +84,25 @@ EXPERIMENTS = [
 ]
 
 
-def get_project_paths():
+FEATURE_FILES = {
+    'correlogram_hsv': 'correlogram_hsv.npy',
+    'correlogram_hsv_spatial': 'correlogram_hsv_spatial.npy',
+    'correlogram_rgb': 'correlogram_rgb.npy',
+    'histogram_hsv': 'histogram_hsv.npy',
+    'histogram_rgb': 'histogram_rgb.npy',
+    'labels': 'labels.npy',
+    'class_names': 'class_names.npy',
+    'image_paths': 'image_paths.npy',
+}
+
+
+def get_project_paths(dataset_profile_key=DEFAULT_DATASET_PROFILE):
     project_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    dataset_profile = resolve_dataset_profile(dataset_profile_key, project_dir)
     return {
         'project_dir': project_dir,
-        'data_dir': project_dir / 'data' / 'corel-1k',
+        'dataset_profile': dataset_profile,
+        'data_dir': dataset_profile['data_dir'],
         'features_dir': project_dir / 'data' / 'features',
         'splits_dir': project_dir / 'data' / 'splits',
         'models_dir': project_dir / 'models',
@@ -96,28 +110,31 @@ def get_project_paths():
     }
 
 
-def metric_summary(y_true, y_pred):
-    return {
-        'accuracy': float(accuracy_score(y_true, y_pred)),
-        'precision': float(precision_score(y_true, y_pred, average='macro', zero_division=0)),
-        'recall': float(recall_score(y_true, y_pred, average='macro', zero_division=0)),
-        'f1_score': float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
-    }
-
-
-def load_features(features_dir):
+def load_features(features_dir, dataset_profile_key):
     """Tai dac trung da trich xuat tu file .npy."""
     features_dir = Path(features_dir)
 
+    resolved_paths = {}
+    for key, base_name in FEATURE_FILES.items():
+        path, is_legacy = resolve_scoped_or_legacy_path(features_dir, dataset_profile_key, base_name)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Khong tim thay feature artifact: {path}. "
+                f"Hay chay python src/feature_extraction.py --dataset-profile {dataset_profile_key}"
+            )
+        resolved_paths[key] = path
+        if is_legacy:
+            print(f"  [legacy] Dang dung artifact cu: {path.name}")
+
     data = {
-        'correlogram_hsv': np.load(features_dir / 'correlogram_hsv.npy'),
-        'correlogram_hsv_spatial': np.load(features_dir / 'correlogram_hsv_spatial.npy'),
-        'correlogram_rgb': np.load(features_dir / 'correlogram_rgb.npy'),
-        'histogram_hsv': np.load(features_dir / 'histogram_hsv.npy'),
-        'histogram_rgb': np.load(features_dir / 'histogram_rgb.npy'),
-        'labels': np.load(features_dir / 'labels.npy'),
-        'class_names': np.load(features_dir / 'class_names.npy', allow_pickle=True),
-        'image_paths': np.load(features_dir / 'image_paths.npy', allow_pickle=True),
+        'correlogram_hsv': np.load(resolved_paths['correlogram_hsv']),
+        'correlogram_hsv_spatial': np.load(resolved_paths['correlogram_hsv_spatial']),
+        'correlogram_rgb': np.load(resolved_paths['correlogram_rgb']),
+        'histogram_hsv': np.load(resolved_paths['histogram_hsv']),
+        'histogram_rgb': np.load(resolved_paths['histogram_rgb']),
+        'labels': np.load(resolved_paths['labels']),
+        'class_names': np.load(resolved_paths['class_names'], allow_pickle=True),
+        'image_paths': np.load(resolved_paths['image_paths'], allow_pickle=True),
     }
 
     print('Da tai dac trung:')
@@ -259,13 +276,30 @@ def save_model_metadata(meta_path, metadata):
         json.dump(metadata, f, indent=2, ensure_ascii=False)
 
 
-def main():
+def parse_args():
+    parser = argparse.ArgumentParser(description='Huan luyen model theo dataset profile')
+    parser.add_argument(
+        '--dataset-profile',
+        default=DEFAULT_DATASET_PROFILE,
+        choices=list_dataset_profiles(),
+        help='Dataset profile de train (mac dinh: corel-1k)',
+    )
+    parser.add_argument(
+        '--experiments',
+        default='all',
+        help='Danh sach ten thi nghiem can train, cach nhau boi dau phay. Mac dinh: all',
+    )
+    return parser.parse_args()
+
+
+def main(dataset_profile_key=DEFAULT_DATASET_PROFILE, selected_experiments='all'):
     """Huan luyen tat ca mo hinh va luu ket qua."""
-    paths = get_project_paths()
+    paths = get_project_paths(dataset_profile_key)
     features_dir = paths['features_dir']
     models_dir = paths['models_dir']
     results_dir = paths['results_dir']
-    split_path = paths['splits_dir'] / DEFAULT_SPLIT_FILENAME
+    dataset_profile = paths['dataset_profile']
+    split_path = paths['splits_dir'] / dataset_profile['split_filename']
 
     models_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -273,18 +307,19 @@ def main():
     print('=' * 60)
     print('HUAN LUYEN MO HINH - COLOR CORRELOGRAM PROJECT')
     print('=' * 60)
+    print(f"Dataset profile: {dataset_profile['key']} ({dataset_profile['display_name']})")
 
-    data = load_features(features_dir)
+    data = load_features(features_dir, dataset_profile['key'])
     if not split_path.exists():
         raise FileNotFoundError(
-            f'Khong tim thay split metadata: {split_path}. Hay chay python src/feature_extraction.py'
+            f'Khong tim thay split metadata: {split_path}. '
+            f'Hay chay python src/feature_extraction.py --dataset-profile {dataset_profile["key"]}'
         )
 
     split_metadata = load_split_metadata(split_path)
+    validate_split_metadata(split_metadata, expected_dataset_name=dataset_profile['dataset_name'])
     split_indices = resolve_split_indices(data['image_paths'], paths['data_dir'], split_metadata)
     train_idx = split_indices['train']
-    val_idx = split_indices['val']
-    train_val_idx = merge_split_indices(split_indices, ['train', 'val'])
     y = data['labels']
 
     print('\nSplit dang su dung:')
@@ -293,7 +328,18 @@ def main():
 
     all_results = []
 
-    for exp_idx, exp in enumerate(EXPERIMENTS, 1):
+    experiments_to_run = EXPERIMENTS
+    if selected_experiments != 'all':
+        requested_names = {name.strip() for name in selected_experiments.split(',') if name.strip()}
+        experiments_to_run = [exp for exp in EXPERIMENTS if exp['name'] in requested_names]
+        if not experiments_to_run:
+            raise ValueError(
+                'Khong tim thay thi nghiem nao trung --experiments. '
+                f'Ho tro: {", ".join(exp["name"] for exp in EXPERIMENTS)}'
+            )
+        print(f"\nChi train cac thi nghiem: {', '.join(exp['name'] for exp in experiments_to_run)}")
+
+    for exp_idx, exp in enumerate(experiments_to_run, 1):
         print('\n' + '=' * 60)
         print(f"THI NGHIEM {exp_idx}: {exp['name']}")
         print('=' * 60)
@@ -302,20 +348,12 @@ def main():
         trainer = get_trainer(exp['trainer'])
         tuned_model, train_info = trainer(X[train_idx], y[train_idx])
 
-        y_val_pred = tuned_model.predict(X[val_idx])
-        val_summary = metric_summary(y[val_idx], y_val_pred)
-        print(f"  Validation accuracy: {val_summary['accuracy']:.4f}")
-        print(f"  Validation precision: {val_summary['precision']:.4f}")
-        print(f"  Validation recall: {val_summary['recall']:.4f}")
-        print(f"  Validation f1: {val_summary['f1_score']:.4f}")
-
-        final_model = clone(tuned_model)
-        final_model.fit(X[train_val_idx], y[train_val_idx])
-
-        model_path = models_dir / exp['model_file']
-        joblib.dump(final_model, model_path)
+        model_path = models_dir / scoped_artifact_name(dataset_profile['key'], exp['model_file'])
+        joblib.dump(tuned_model, model_path)
 
         metadata = {
+            'dataset_profile': dataset_profile['key'],
+            'dataset_name': dataset_profile['dataset_name'],
             'experiment_name': exp['name'],
             'feature': exp['feature'],
             'feature_key': exp['feature_key'],
@@ -325,12 +363,11 @@ def main():
             'split_file': str(split_path),
             'split_counts': {name: int(len(idx)) for name, idx in split_indices.items()},
             'tuning_split': 'train',
-            'validation_split': 'val',
-            'final_training_split': 'train+val',
+            'tuning_method': 'stratified_kfold_cv_on_train',
+            'final_training_split': 'train',
             'held_out_test_split': 'test',
-            'retrieval_split': 'train+val',
+            'retrieval_split': 'train',
             'train_cv_accuracy': train_info['train_cv_accuracy'],
-            'validation_summary': val_summary,
         }
         save_model_metadata(models_dir / f'{model_path.stem}.meta.json', metadata)
 
@@ -340,12 +377,10 @@ def main():
             'feature': exp['feature'],
             'color_space': exp['color_space'],
             'train_cv_accuracy': train_info['train_cv_accuracy'],
-            'validation_accuracy': val_summary['accuracy'],
-            'validation_precision': val_summary['precision'],
-            'validation_recall': val_summary['recall'],
-            'validation_f1_score': val_summary['f1_score'],
             'time': train_info['time'],
+            'dataset_profile': dataset_profile['key'],
             'split_file': str(split_path),
+            'final_training_split': 'train',
             'best_params': {k: str(v) for k, v in train_info['best_params'].items()},
         }
         all_results.append(result)
@@ -353,23 +388,25 @@ def main():
     print('\n' + '=' * 60)
     print('TONG KET KET QUA')
     print('=' * 60)
-    print(f"\n{'#':<4} {'Feature':<18} {'Color':<6} {'Model':<14} {'TrainCV':<10} {'ValAcc':<10}")
-    print('-' * 75)
+    print(f"\n{'#':<4} {'Feature':<18} {'Color':<6} {'Model':<14} {'TrainCV':<10}")
+    print('-' * 63)
     for i, r in enumerate(all_results, 1):
         print(
             f"{i:<4} {r['feature']:<18} {r['color_space']:<6} {r['model']:<14} "
-            f"{r['train_cv_accuracy']:.4f}    {r['validation_accuracy']:.4f}"
+            f"{r['train_cv_accuracy']:.4f}"
         )
 
-    with open(results_dir / 'training_results.json', 'w', encoding='utf-8') as f:
+    training_results_path = results_dir / scoped_artifact_name(dataset_profile['key'], 'training_results.json')
+    with open(training_results_path, 'w', encoding='utf-8') as f:
         json.dump(all_results, f, indent=2, ensure_ascii=False)
 
     print(f"\nDa luu model vao: {models_dir}")
-    print(f"Da luu ket qua vao: {results_dir / 'training_results.json'}")
+    print(f"Da luu ket qua vao: {training_results_path}")
     print('\n' + '=' * 60)
     print('HUAN LUYEN HOAN TAT!')
     print('=' * 60)
 
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    main(dataset_profile_key=args.dataset_profile, selected_experiments=args.experiments)

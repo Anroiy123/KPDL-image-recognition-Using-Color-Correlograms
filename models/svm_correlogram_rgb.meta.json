@@ -11,20 +11,13 @@
   },
   "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
   "split_counts": {
-    "train": 699,
-    "val": 150,
-    "test": 151
+    "train": 800,
+    "test": 200
   },
   "tuning_split": "train",
-  "validation_split": "val",
-  "final_training_split": "train+val",
+  "tuning_method": "stratified_kfold_cv_on_train",
+  "final_training_split": "train",
   "held_out_test_split": "test",
-  "retrieval_split": "train+val",
-  "train_cv_accuracy": 0.8039876670092496,
-  "validation_summary": {
-    "accuracy": 0.84,
-    "precision": 0.8556265664160401,
-    "recall": 0.8400000000000001,
-    "f1_score": 0.8369234205564116
-  }
+  "retrieval_split": "train",
+  "train_cv_accuracy": 0.825
 }

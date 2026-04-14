@@ -5,6 +5,7 @@ Trich xuat Color Correlogram va Color Histogram cho tat ca anh,
 luu ket qua vao file .npy de su dung lai.
 """
 
+import argparse
 import os
 import sys
 import time
@@ -17,7 +18,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from preprocessing import load_dataset, convert_to_hsv, quantize_colors_hsv, quantize_colors_rgb
 from color_correlogram import auto_correlogram_fast, spatial_correlogram
 from color_histogram import color_histogram
-from dataset_split import ensure_split_metadata, DEFAULT_SPLIT_FILENAME
+from dataset_split import ensure_split_metadata
+from dataset_profile import (
+    DEFAULT_DATASET_PROFILE,
+    list_dataset_profiles,
+    resolve_dataset_profile,
+    scoped_artifact_path,
+)
+
+
+FEATURE_OUTPUT_FILES = {
+    "correlogram_hsv": "correlogram_hsv.npy",
+    "correlogram_hsv_spatial": "correlogram_hsv_spatial.npy",
+    "correlogram_rgb": "correlogram_rgb.npy",
+    "histogram_hsv": "histogram_hsv.npy",
+    "histogram_rgb": "histogram_rgb.npy",
+    "labels": "labels.npy",
+    "class_names": "class_names.npy",
+    "image_paths": "image_paths.npy",
+}
 
 
 def extract_all_features(images, method='correlogram', color_space='rgb',
@@ -81,12 +100,24 @@ def extract_all_features(images, method='correlogram', color_space='rgb',
     return np.array(features)
 
 
-def main():
+def parse_args():
+    parser = argparse.ArgumentParser(description="Trich xuat dac trung cho dataset profile")
+    parser.add_argument(
+        "--dataset-profile",
+        default=DEFAULT_DATASET_PROFILE,
+        choices=list_dataset_profiles(),
+        help="Profile dataset can trich xuat (mac dinh: corel-1k)",
+    )
+    return parser.parse_args()
+
+
+def main(dataset_profile_key=DEFAULT_DATASET_PROFILE):
     """Trich xuat tat ca dac trung va luu vao file."""
 
     # Xac dinh duong dan
     project_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    data_dir = project_dir / "data" / "corel-1k"
+    dataset_profile = resolve_dataset_profile(dataset_profile_key, project_dir)
+    data_dir = dataset_profile["data_dir"]
     features_dir = project_dir / "data" / "features"
     splits_dir = project_dir / "data" / "splits"
     features_dir.mkdir(parents=True, exist_ok=True)
@@ -95,13 +126,15 @@ def main():
     print("=" * 60)
     print("TRICH XUAT DAC TRUNG - COLOR CORRELOGRAM PROJECT")
     print("=" * 60)
+    print(f"Dataset profile: {dataset_profile['key']} ({dataset_profile['display_name']})")
+    print(f"Data dir: {data_dir}")
 
     # Tai dataset
     print("\n[1/7] Tai dataset...")
     images, labels, paths = load_dataset(data_dir)
 
     if len(images) == 0:
-        print("ERROR: Khong co anh nao! Hay kiem tra thu muc data/corel-1k/")
+        print(f"ERROR: Khong co anh nao! Hay kiem tra thu muc {data_dir}")
         return
 
     # Chuyen labels thanh so
@@ -156,32 +189,40 @@ def main():
 
     # Luu tat ca
     print("\n[7/7] Luu ket qua...")
-    np.save(features_dir / "correlogram_hsv.npy", X_corr_hsv)
-    np.save(features_dir / "correlogram_hsv_spatial.npy", X_corr_hsv_spatial)
-    np.save(features_dir / "correlogram_rgb.npy", X_corr_rgb)
-    np.save(features_dir / "histogram_hsv.npy", X_hist_hsv)
-    np.save(features_dir / "histogram_rgb.npy", X_hist_rgb)
-    np.save(features_dir / "labels.npy", y)
-    np.save(features_dir / "class_names.npy", class_names)
-    np.save(features_dir / "image_paths.npy", np.array(paths))
+    output_values = {
+        "correlogram_hsv": X_corr_hsv,
+        "correlogram_hsv_spatial": X_corr_hsv_spatial,
+        "correlogram_rgb": X_corr_rgb,
+        "histogram_hsv": X_hist_hsv,
+        "histogram_rgb": X_hist_rgb,
+        "labels": y,
+        "class_names": class_names,
+        "image_paths": np.array(paths),
+    }
+    output_paths = {}
+    for key, value in output_values.items():
+        output_path = scoped_artifact_path(features_dir, dataset_profile["key"], FEATURE_OUTPUT_FILES[key])
+        np.save(output_path, value)
+        output_paths[key] = output_path
 
-    split_path = splits_dir / DEFAULT_SPLIT_FILENAME
+    split_path = splits_dir / dataset_profile["split_filename"]
     split_metadata = ensure_split_metadata(
         split_path=split_path,
         image_paths=paths,
         label_names=labels,
         data_dir=data_dir,
+        dataset_name=dataset_profile["dataset_name"],
         force=True,
     )
 
     print(f"\nDa luu vao: {features_dir}")
-    print(f"  - correlogram_hsv.npy: {X_corr_hsv.shape}")
-    print(f"  - correlogram_hsv_spatial.npy: {X_corr_hsv_spatial.shape}")
-    print(f"  - correlogram_rgb.npy: {X_corr_rgb.shape}")
-    print(f"  - histogram_hsv.npy:   {X_hist_hsv.shape}")
-    print(f"  - histogram_rgb.npy:   {X_hist_rgb.shape}")
-    print(f"  - labels.npy:          {y.shape}")
-    print(f"  - class_names.npy:     {class_names.shape}")
+    print(f"  - {output_paths['correlogram_hsv'].name}: {X_corr_hsv.shape}")
+    print(f"  - {output_paths['correlogram_hsv_spatial'].name}: {X_corr_hsv_spatial.shape}")
+    print(f"  - {output_paths['correlogram_rgb'].name}: {X_corr_rgb.shape}")
+    print(f"  - {output_paths['histogram_hsv'].name}:   {X_hist_hsv.shape}")
+    print(f"  - {output_paths['histogram_rgb'].name}:   {X_hist_rgb.shape}")
+    print(f"  - {output_paths['labels'].name}:          {y.shape}")
+    print(f"  - {output_paths['class_names'].name}:     {class_names.shape}")
     print(f"  - split metadata:      {split_path}")
     for split_name, count in split_metadata['counts'].items():
         print(f"      {split_name}: {count} anh")
@@ -192,4 +233,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(dataset_profile_key=args.dataset_profile)

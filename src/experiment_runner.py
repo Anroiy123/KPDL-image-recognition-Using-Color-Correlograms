@@ -14,7 +14,6 @@ from pathlib import Path
 
 import joblib
 import numpy as np
-from sklearn.base import clone
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -22,12 +21,14 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 
 from evaluate import plot_confusion_matrix
-from dataset_split import (
-    DEFAULT_SPLIT_FILENAME,
-    load_split_metadata,
-    merge_split_indices,
-    resolve_split_indices,
+from dataset_profile import (
+    DEFAULT_DATASET_PROFILE,
+    list_dataset_profiles,
+    resolve_dataset_profile,
+    resolve_scoped_or_legacy_path,
+    scoped_artifact_name,
 )
+from dataset_split import load_split_metadata, resolve_split_indices, validate_split_metadata
 from evaluation_methods import (
     evaluate_bootstrap,
     evaluate_holdout,
@@ -61,10 +62,16 @@ EVAL_LABELS = {
 
 
 def get_project_paths():
+    return get_project_paths_by_profile(DEFAULT_DATASET_PROFILE)
+
+
+def get_project_paths_by_profile(dataset_profile_key):
     project_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    dataset_profile = resolve_dataset_profile(dataset_profile_key, project_dir)
     return {
         'project_dir': project_dir,
-        'data_dir': project_dir / 'data' / 'corel-1k',
+        'dataset_profile': dataset_profile,
+        'data_dir': dataset_profile['data_dir'],
         'features_dir': project_dir / 'data' / 'features',
         'splits_dir': project_dir / 'data' / 'splits',
         'results_dir': project_dir / 'results',
@@ -72,15 +79,17 @@ def get_project_paths():
     }
 
 
-def load_feature_matrix(feature_method, color_space):
+def load_feature_matrix(feature_method, color_space, dataset_profile_key=DEFAULT_DATASET_PROFILE):
     """Tai feature matrix, neu thieu thi tu tao tu dataset."""
-    paths = get_project_paths()
+    paths = get_project_paths_by_profile(dataset_profile_key)
+    dataset_profile = paths['dataset_profile']
     features_dir = paths['features_dir']
     features_dir.mkdir(parents=True, exist_ok=True)
     key = (feature_method, color_space)
     if key not in FEATURE_FILE_MAP:
         raise ValueError(f'Khong ho tro ket hop feature/color: {feature_method}/{color_space}')
-    feature_file = features_dir / FEATURE_FILE_MAP[key]
+    base_feature_name = FEATURE_FILE_MAP[key]
+    feature_file = features_dir / scoped_artifact_name(dataset_profile['key'], base_feature_name)
 
     if not feature_file.exists():
         images, _, _ = load_dataset(paths['data_dir'])
@@ -101,11 +110,16 @@ def load_feature_matrix(feature_method, color_space):
     else:
         X = np.load(feature_file)
 
-    labels_path = features_dir / 'labels.npy'
-    class_names_path = features_dir / 'class_names.npy'
-    image_paths_path = features_dir / 'image_paths.npy'
+    labels_path, labels_legacy = resolve_scoped_or_legacy_path(features_dir, dataset_profile['key'], 'labels.npy')
+    class_names_path, class_names_legacy = resolve_scoped_or_legacy_path(features_dir, dataset_profile['key'], 'class_names.npy')
+    image_paths_path, image_paths_legacy = resolve_scoped_or_legacy_path(features_dir, dataset_profile['key'], 'image_paths.npy')
     if not labels_path.exists() or not class_names_path.exists() or not image_paths_path.exists():
-        raise FileNotFoundError('Thieu labels.npy, class_names.npy hoac image_paths.npy. Hay chay python src/feature_extraction.py')
+        raise FileNotFoundError(
+            'Thieu labels/class_names/image_paths theo dataset profile. '
+            f'Hay chay python src/feature_extraction.py --dataset-profile {dataset_profile["key"]}'
+        )
+    if labels_legacy or class_names_legacy or image_paths_legacy:
+        print('  [legacy] Dang dung labels/class_names/image_paths ten cu cho corel-1k')
 
     y = np.load(labels_path)
     class_names = np.load(class_names_path, allow_pickle=True)
@@ -148,39 +162,35 @@ def get_cv_model(model_name):
     raise ValueError(f'Model khong ho tro: {model_name}')
 
 
-def run_experiment(feature, color, model_name, eval_method, test_size=0.2, k=5, n_repeats=10, n_iterations=30, sample_ratio=0.8, random_state=42):
-    X, y, class_names, image_paths, feature_file = load_feature_matrix(feature, color)
+def run_experiment(feature, color, model_name, eval_method, test_size=0.2, k=5, n_repeats=10, n_iterations=30, sample_ratio=0.8, random_state=42, dataset_profile_key=DEFAULT_DATASET_PROFILE):
+    X, y, class_names, image_paths, feature_file = load_feature_matrix(feature, color, dataset_profile_key=dataset_profile_key)
     train_model_fn = get_train_model_fn(model_name)
-    paths = get_project_paths()
+    paths = get_project_paths_by_profile(dataset_profile_key)
+    dataset_profile = paths['dataset_profile']
 
     if eval_method == 'independent_test':
-        split_path = paths['splits_dir'] / DEFAULT_SPLIT_FILENAME
+        split_path = paths['splits_dir'] / dataset_profile['split_filename']
         if not split_path.exists():
-            raise FileNotFoundError(f'Thieu split metadata: {split_path}. Hay chay python src/feature_extraction.py')
+            raise FileNotFoundError(
+                f'Thieu split metadata: {split_path}. '
+                f'Hay chay python src/feature_extraction.py --dataset-profile {dataset_profile_key}'
+            )
 
         split_metadata = load_split_metadata(split_path)
+        validate_split_metadata(split_metadata, expected_dataset_name=dataset_profile['dataset_name'])
         split_indices = resolve_split_indices(image_paths, paths['data_dir'], split_metadata)
         train_idx = split_indices['train']
-        val_idx = split_indices['val']
         test_idx = split_indices['test']
-        train_val_idx = merge_split_indices(split_indices, ['train', 'val'])
 
         tuned_model, train_info = train_model_fn(X[train_idx], y[train_idx])
-        y_val_pred = tuned_model.predict(X[val_idx])
-        val_summary = _basic_metrics(y[val_idx], y_val_pred)
-
-        final_model = clone(tuned_model)
-        final_model.fit(X[train_val_idx], y[train_val_idx])
-
         y_true = y[test_idx]
-        y_pred = final_model.predict(X[test_idx])
+        y_pred = tuned_model.predict(X[test_idx])
         eval_info = {
             'method': 'independent_test',
             'split_file': str(split_path),
             'split_counts': {name: int(len(idx)) for name, idx in split_indices.items()},
             'training': train_info,
-            'validation_summary': val_summary,
-            'final_training_split': 'train+val',
+            'final_training_split': 'train',
             'summary': _basic_metrics(y_true, y_pred),
         }
     elif eval_method == 'holdout':
@@ -203,7 +213,7 @@ def run_experiment(feature, color, model_name, eval_method, test_size=0.2, k=5, 
     report_text = classification_report(y_true, y_pred, target_names=class_names, zero_division=0)
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    experiment_name = f'{feature}_{color}_{model_name}_{eval_method}'
+    experiment_name = f'{dataset_profile["key"]}_{feature}_{color}_{model_name}_{eval_method}'
     results_dir = paths['results_dir']
     results_dir.mkdir(parents=True, exist_ok=True)
     cm_path = results_dir / f'cm_{experiment_name}_{timestamp}.png'
@@ -223,6 +233,8 @@ def run_experiment(feature, color, model_name, eval_method, test_size=0.2, k=5, 
         'feature': feature,
         'color_space': color,
         'model': model_name,
+        'dataset_profile': dataset_profile['key'],
+        'dataset_name': dataset_profile['dataset_name'],
         'evaluation_method': eval_method,
         'evaluation_label': EVAL_LABELS[eval_method],
         'feature_file': str(feature_file),
@@ -244,7 +256,6 @@ def run_experiment(feature, color, model_name, eval_method, test_size=0.2, k=5, 
 
     with open(report_path, 'w', encoding='utf-8') as f:
         if eval_method == 'independent_test':
-            f.write(f"Validation summary: {json.dumps(eval_info['validation_summary'], ensure_ascii=False)}\n")
             f.write(f"Split file: {eval_info['split_file']}\n\n")
         f.write(report_text)
 
@@ -273,6 +284,7 @@ def print_summary(result):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Chay thi nghiem linh hoat cho do an Color Correlogram')
+    parser.add_argument('--dataset-profile', choices=list_dataset_profiles(), default=DEFAULT_DATASET_PROFILE)
     parser.add_argument('--feature', choices=['correlogram', 'spatial_correlogram', 'histogram'], required=True)
     parser.add_argument('--color', choices=['hsv', 'rgb'], required=True)
     parser.add_argument('--model', choices=['svm', 'knn'], required=True)
@@ -289,6 +301,7 @@ def parse_args():
 def main():
     args = parse_args()
     result, report_text = run_experiment(
+        dataset_profile_key=args.dataset_profile,
         feature=args.feature,
         color=args.color,
         model_name=args.model,

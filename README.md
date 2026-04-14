@@ -22,7 +22,7 @@ Pipeline hiện tại của dự án:
    - `Correlogram RGB`: `256` chiều
    - `Histogram HSV`: `72` chiều
 4. Huấn luyện các mô hình học máy với `GridSearchCV`.
-5. Tạo split cố định `train/val/test` để tách riêng dữ liệu huấn luyện, chọn mô hình, và kiểm tra cuối.
+5. Tạo split cố định `train/test` để tách riêng dữ liệu huấn luyện và kiểm tra cuối.
 6. Đánh giá bằng `Accuracy`, `Precision`, `Recall`, `F1-score`, `Classification Report`, `Confusion Matrix` trên tập `test` độc lập.
 7. Chạy demo Streamlit để dự đoán lớp ảnh và tìm ảnh tương tự trong tập không dùng `test` để train model.
 
@@ -32,7 +32,7 @@ Pipeline hiện tại của dự án:
 KPDL/
 ├── data/
 │   ├── corel-1k/                # Dataset Corel-1K, mỗi lớp là một thư mục con
-│   ├── splits/                  # Metadata split train/val/test
+│   ├── splits/                  # Metadata split train/test
 │   └── features/                # Đặc trưng đã trích xuất (.npy)
 ├── models/                      # Model đã huấn luyện (.pkl)
 ├── notebooks/                   # Notebook minh họa và phân tích
@@ -180,7 +180,7 @@ image_paths.npy     : (1000,)
 - `labels.npy`: nhãn lớp của từng ảnh.
 - `class_names.npy`: danh sách tên lớp.
 - `image_paths.npy`: đường dẫn ảnh gốc, dùng để tìm ảnh tương tự trong demo.
-- `data/splits/corel-1k_split.json`: split cố định `train/val/test` dùng chung cho train, evaluation và app.
+- `data/splits/corel-1k_split.json`: split cố định `train/test` dùng chung cho train, evaluation và app.
 
 ### Bước 3. Huấn luyện mô hình
 
@@ -199,9 +199,8 @@ Script `src/train.py` hiện huấn luyện 6 thí nghiệm:
 - `Correlogram RGB + SVM`
 
 Workflow của `src/train.py`:
-- Tune hyperparameter chỉ trên `train`
-- Đo tạm trên `val`
-- Refit model cuối trên `train+val`
+- Tune hyperparameter bằng `StratifiedKFold` chỉ trên `train`
+- Lưu model cuối trên toàn bộ `train`
 - Không dùng `test` trong huấn luyện
 
 Model được lưu tại `models/`:
@@ -258,7 +257,7 @@ streamlit run app.py
 - Load model `models/svm_correlogram_hsv_spatial.pkl`
 - Load metadata `models/svm_correlogram_hsv_spatial.meta.json`
 - Load `class_names.npy`
-- Load `image_paths.npy` và `correlogram_hsv_spatial.npy` để tìm ảnh tương tự trong split `train+val`
+- Load `image_paths.npy` và `correlogram_hsv_spatial.npy` để tìm ảnh tương tự trong split `train`
 - Cho phép upload ảnh để dự đoán lớp
 - Hiển thị vector đặc trưng Correlogram
 - Hiển thị các ảnh gần nhất trong tập dữ liệu nếu có đủ dữ liệu phụ trợ
@@ -276,7 +275,7 @@ Lưu ý quan trọng:
 Chứa đặc trưng đã trích xuất để tránh phải tính lại từ đầu mỗi lần huấn luyện.
 
 ### `data/splits/`
-Chứa split metadata cố định để đảm bảo train, validation và final test luôn dùng đúng cùng một phép chia dữ liệu.
+Chứa split metadata cố định để đảm bảo train và final test luôn dùng đúng cùng một phép chia dữ liệu.
 
 ### `models/`
 Chứa các model `.pkl` đã huấn luyện. Đây là đầu vào bắt buộc để `app.py` dự đoán được.
@@ -310,12 +309,12 @@ Kết quả được lưu trong `results/training_results.json` và `results/eva
 
 | Phương pháp | Accuracy | Precision | Recall | F1-score |
 | --- | ---: | ---: | ---: | ---: |
-| Spatial Correlogram HSV + SVM | 87.5% | 0.8740 | 0.8750 | 0.8735 |
-| Correlogram HSV + SVM | 85.3% | 0.8560 | 0.8530 | 0.8528 |
-| Correlogram HSV + KNN | 79.8% | 0.8192 | 0.7980 | 0.7926 |
-| Correlogram HSV + Random Forest | 85.2% | 0.8515 | 0.8520 | 0.8498 |
-| Histogram HSV + SVM | 79.5% | 0.7945 | 0.7950 | 0.7931 |
-| Correlogram RGB + SVM | 82.9% | 0.8295 | 0.8290 | 0.8284 |
+| Spatial Correlogram HSV + SVM | 84.5% | 0.8462 | 0.8450 | 0.8442 |
+| Correlogram HSV + SVM | 82.5% | 0.8313 | 0.8250 | 0.8259 |
+| Correlogram HSV + KNN | 78.0% | 0.8233 | 0.7800 | 0.7790 |
+| Correlogram HSV + Random Forest | 84.0% | 0.8430 | 0.8400 | 0.8398 |
+| Histogram HSV + SVM | 78.0% | 0.7798 | 0.7800 | 0.7778 |
+| Correlogram RGB + SVM | 82.0% | 0.8294 | 0.8200 | 0.8188 |
 
 Nhận xét nhanh:
 - **Spatial Correlogram HSV + SVM** là cấu hình tốt nhất trong các thí nghiệm hiện có.
@@ -330,7 +329,7 @@ Các chi tiết chính trong phương pháp hiện tại:
 - Khoảng cách correlogram: `{1, 3, 5, 7}`
 - Vector đặc trưng chính: `1440` chiều (`Spatial Correlogram HSV`)
 - Mô hình demo chính: `SVM`
-- Tách dữ liệu: `train/val/test = 70/15/15`
+- Tách dữ liệu: `train/test = 80/20`
 - Phương pháp đánh giá cuối: `held-out test` trên split cố định
 
 ## 11. Lỗi thường gặp và cách xử lý
