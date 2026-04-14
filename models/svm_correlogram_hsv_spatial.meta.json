@@ -1,0 +1,30 @@
+{
+  "experiment_name": "SpatialCorrelogram_HSV_SVM",
+  "feature": "SpatialCorrelogram",
+  "feature_key": "correlogram_hsv_spatial",
+  "color_space": "HSV",
+  "model": "SVM",
+  "best_params": {
+    "svm__C": "0.1",
+    "svm__gamma": "scale",
+    "svm__kernel": "linear"
+  },
+  "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
+  "split_counts": {
+    "train": 699,
+    "val": 150,
+    "test": 151
+  },
+  "tuning_split": "train",
+  "validation_split": "val",
+  "final_training_split": "train+val",
+  "held_out_test_split": "test",
+  "retrieval_split": "train+val",
+  "train_cv_accuracy": 0.869825282631038,
+  "validation_summary": {
+    "accuracy": 0.8733333333333333,
+    "precision": 0.8766746411483253,
+    "recall": 0.8733333333333333,
+    "f1_score": 0.8707294592035808
+  }
+}

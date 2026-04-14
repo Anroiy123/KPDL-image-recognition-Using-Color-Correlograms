@@ -2,7 +2,9 @@
 tiliumnhckhaiphdliuaphngtin
 openspec
 .codex
-claude.md__pycache__/
+CLAUDE.md
+__pycache__/
 *.pyc
 .pytest_cache/
 .egg-info/
+results/

@@ -1,295 +1,375 @@
 """
-train.py - Huan luyen cac mo hinh hoc may (SVM, KNN, Random Forest)
+train.py - Huan luyen cac mo hinh hoc may voi split train/val/test co dinh.
 
-Su dung dac trung da trich xuat tu file .npy
-Ap dung GridSearchCV de tim tham so tot nhat
-Luu model da train vao thu muc models/
+Quy uoc:
+- Tune hyperparameter tren train split
+- Do chat luong tam thoi tren val split
+- Refit model cuoi tren train+val de luu cho app
+- Khong dung test split trong huan luyen
 """
 
+import json
 import os
-import sys
 import time
-import numpy as np
-import joblib
 from pathlib import Path
-from sklearn.model_selection import cross_val_score, GridSearchCV, StratifiedKFold
+
+import joblib
+import numpy as np
+from sklearn.base import clone
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report, accuracy_score
+
+from dataset_split import (
+    DEFAULT_SPLIT_FILENAME,
+    load_split_metadata,
+    merge_split_indices,
+    resolve_split_indices,
+)
+
+
+EXPERIMENTS = [
+    {
+        'name': 'SpatialCorrelogram_HSV_SVM',
+        'feature_key': 'correlogram_hsv_spatial',
+        'feature': 'SpatialCorrelogram',
+        'color_space': 'HSV',
+        'trainer': 'svm',
+        'model_file': 'svm_correlogram_hsv_spatial.pkl',
+    },
+    {
+        'name': 'Correlogram_HSV_SVM',
+        'feature_key': 'correlogram_hsv',
+        'feature': 'Correlogram',
+        'color_space': 'HSV',
+        'trainer': 'svm',
+        'model_file': 'svm_correlogram_hsv.pkl',
+    },
+    {
+        'name': 'Correlogram_HSV_KNN',
+        'feature_key': 'correlogram_hsv',
+        'feature': 'Correlogram',
+        'color_space': 'HSV',
+        'trainer': 'knn',
+        'model_file': 'knn_correlogram_hsv.pkl',
+    },
+    {
+        'name': 'Correlogram_HSV_RF',
+        'feature_key': 'correlogram_hsv',
+        'feature': 'Correlogram',
+        'color_space': 'HSV',
+        'trainer': 'rf',
+        'model_file': 'rf_correlogram_hsv.pkl',
+    },
+    {
+        'name': 'Histogram_HSV_SVM',
+        'feature_key': 'histogram_hsv',
+        'feature': 'Histogram',
+        'color_space': 'HSV',
+        'trainer': 'svm',
+        'model_file': 'svm_histogram_hsv.pkl',
+    },
+    {
+        'name': 'Correlogram_RGB_SVM',
+        'feature_key': 'correlogram_rgb',
+        'feature': 'Correlogram',
+        'color_space': 'RGB',
+        'trainer': 'svm',
+        'model_file': 'svm_correlogram_rgb.pkl',
+    },
+]
+
+
+def get_project_paths():
+    project_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return {
+        'project_dir': project_dir,
+        'data_dir': project_dir / 'data' / 'corel-1k',
+        'features_dir': project_dir / 'data' / 'features',
+        'splits_dir': project_dir / 'data' / 'splits',
+        'models_dir': project_dir / 'models',
+        'results_dir': project_dir / 'results',
+    }
+
+
+def metric_summary(y_true, y_pred):
+    return {
+        'accuracy': float(accuracy_score(y_true, y_pred)),
+        'precision': float(precision_score(y_true, y_pred, average='macro', zero_division=0)),
+        'recall': float(recall_score(y_true, y_pred, average='macro', zero_division=0)),
+        'f1_score': float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
+    }
 
 
 def load_features(features_dir):
-    """Tai dac trung da trich xuat tu file .npy.
-
-    Returns:
-        data: Dict chua cac ma tran dac trung va nhan
-    """
+    """Tai dac trung da trich xuat tu file .npy."""
     features_dir = Path(features_dir)
 
     data = {
-        'correlogram_hsv': np.load(features_dir / "correlogram_hsv.npy"),
-        'correlogram_rgb': np.load(features_dir / "correlogram_rgb.npy"),
-        'histogram_hsv': np.load(features_dir / "histogram_hsv.npy"),
-        'labels': np.load(features_dir / "labels.npy"),
-        'class_names': np.load(features_dir / "class_names.npy", allow_pickle=True),
+        'correlogram_hsv': np.load(features_dir / 'correlogram_hsv.npy'),
+        'correlogram_hsv_spatial': np.load(features_dir / 'correlogram_hsv_spatial.npy'),
+        'correlogram_rgb': np.load(features_dir / 'correlogram_rgb.npy'),
+        'histogram_hsv': np.load(features_dir / 'histogram_hsv.npy'),
+        'histogram_rgb': np.load(features_dir / 'histogram_rgb.npy'),
+        'labels': np.load(features_dir / 'labels.npy'),
+        'class_names': np.load(features_dir / 'class_names.npy', allow_pickle=True),
+        'image_paths': np.load(features_dir / 'image_paths.npy', allow_pickle=True),
     }
 
-    print("Da tai dac trung:")
+    print('Da tai dac trung:')
     for key, val in data.items():
-        print(f"  {key}: {val.shape}")
+        print(f'  {key}: {val.shape}')
 
     return data
 
 
 def train_svm(X, y, cv=5, n_jobs=-1):
-    """Huan luyen SVM voi GridSearchCV.
-
-    Args:
-        X: Ma tran dac trung
-        y: Vector nhan
-        cv: So fold cross-validation
-        n_jobs: So process song song cho GridSearchCV
-
-    Returns:
-        best_model: Pipeline (Scaler + SVM) tot nhat
-        results: Dict ket qua
-    """
-    print("\n--- Huan luyen SVM ---")
+    """Huan luyen SVM voi GridSearchCV tren train split."""
+    print('\n--- Huan luyen SVM ---')
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
-        ('svm', SVC(random_state=42))
+        ('svm', SVC(random_state=42, probability=True)),
     ])
 
     param_grid = {
         'svm__C': [0.1, 1, 10, 100],
         'svm__gamma': ['scale', 0.01, 0.001],
-        'svm__kernel': ['rbf', 'linear']
+        'svm__kernel': ['rbf', 'linear'],
     }
 
     grid = GridSearchCV(
-        pipeline, param_grid,
+        pipeline,
+        param_grid,
         cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=42),
         scoring='accuracy',
         n_jobs=n_jobs,
-        verbose=1
+        verbose=1,
     )
 
     start = time.time()
     grid.fit(X, y)
     elapsed = time.time() - start
 
-    print(f"  Tham so tot nhat: {grid.best_params_}")
-    print(f"  Accuracy (CV): {grid.best_score_:.4f}")
-    print(f"  Thoi gian: {elapsed:.1f}s")
+    print(f'  Tham so tot nhat: {grid.best_params_}')
+    print(f'  Accuracy (train CV): {grid.best_score_:.4f}')
+    print(f'  Thoi gian: {elapsed:.1f}s')
 
     return grid.best_estimator_, {
         'model': 'SVM',
         'best_params': grid.best_params_,
-        'cv_accuracy': grid.best_score_,
-        'time': elapsed
+        'train_cv_accuracy': float(grid.best_score_),
+        'time': elapsed,
     }
 
 
 def train_knn(X, y, cv=5, n_jobs=-1):
-    """Huan luyen KNN voi GridSearchCV.
-
-    Returns:
-        best_model: Pipeline tot nhat
-        results: Dict ket qua
-    """
-    print("\n--- Huan luyen KNN ---")
+    """Huan luyen KNN voi GridSearchCV tren train split."""
+    print('\n--- Huan luyen KNN ---')
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
-        ('knn', KNeighborsClassifier())
+        ('knn', KNeighborsClassifier()),
     ])
 
     param_grid = {
         'knn__n_neighbors': [3, 5, 7, 9, 11],
         'knn__weights': ['uniform', 'distance'],
-        'knn__metric': ['euclidean', 'manhattan']
+        'knn__metric': ['euclidean', 'manhattan'],
     }
 
     grid = GridSearchCV(
-        pipeline, param_grid,
+        pipeline,
+        param_grid,
         cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=42),
         scoring='accuracy',
         n_jobs=n_jobs,
-        verbose=1
+        verbose=1,
     )
 
     start = time.time()
     grid.fit(X, y)
     elapsed = time.time() - start
 
-    print(f"  Tham so tot nhat: {grid.best_params_}")
-    print(f"  Accuracy (CV): {grid.best_score_:.4f}")
-    print(f"  Thoi gian: {elapsed:.1f}s")
+    print(f'  Tham so tot nhat: {grid.best_params_}')
+    print(f'  Accuracy (train CV): {grid.best_score_:.4f}')
+    print(f'  Thoi gian: {elapsed:.1f}s')
 
     return grid.best_estimator_, {
         'model': 'KNN',
         'best_params': grid.best_params_,
-        'cv_accuracy': grid.best_score_,
-        'time': elapsed
+        'train_cv_accuracy': float(grid.best_score_),
+        'time': elapsed,
     }
 
 
 def train_rf(X, y, cv=5):
-    """Huan luyen Random Forest voi GridSearchCV.
-
-    Returns:
-        best_model: Pipeline tot nhat
-        results: Dict ket qua
-    """
-    print("\n--- Huan luyen Random Forest ---")
+    """Huan luyen Random Forest voi GridSearchCV tren train split."""
+    print('\n--- Huan luyen Random Forest ---')
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
-        ('rf', RandomForestClassifier(random_state=42))
+        ('rf', RandomForestClassifier(random_state=42)),
     ])
 
     param_grid = {
         'rf__n_estimators': [100, 200],
         'rf__max_depth': [None, 20, 30],
-        'rf__min_samples_split': [2, 5]
+        'rf__min_samples_split': [2, 5],
     }
 
     grid = GridSearchCV(
-        pipeline, param_grid,
+        pipeline,
+        param_grid,
         cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=42),
         scoring='accuracy',
         n_jobs=-1,
-        verbose=1
+        verbose=1,
     )
 
     start = time.time()
     grid.fit(X, y)
     elapsed = time.time() - start
 
-    print(f"  Tham so tot nhat: {grid.best_params_}")
-    print(f"  Accuracy (CV): {grid.best_score_:.4f}")
-    print(f"  Thoi gian: {elapsed:.1f}s")
+    print(f'  Tham so tot nhat: {grid.best_params_}')
+    print(f'  Accuracy (train CV): {grid.best_score_:.4f}')
+    print(f'  Thoi gian: {elapsed:.1f}s')
 
     return grid.best_estimator_, {
         'model': 'Random Forest',
         'best_params': grid.best_params_,
-        'cv_accuracy': grid.best_score_,
-        'time': elapsed
+        'train_cv_accuracy': float(grid.best_score_),
+        'time': elapsed,
     }
+
+
+def get_trainer(trainer_name):
+    if trainer_name == 'svm':
+        return train_svm
+    if trainer_name == 'knn':
+        return train_knn
+    if trainer_name == 'rf':
+        return train_rf
+    raise ValueError(f'Khong ho tro trainer: {trainer_name}')
+
+
+def save_model_metadata(meta_path, metadata):
+    with open(meta_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
 
 
 def main():
     """Huan luyen tat ca mo hinh va luu ket qua."""
+    paths = get_project_paths()
+    features_dir = paths['features_dir']
+    models_dir = paths['models_dir']
+    results_dir = paths['results_dir']
+    split_path = paths['splits_dir'] / DEFAULT_SPLIT_FILENAME
 
-    project_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    features_dir = project_dir / "data" / "features"
-    models_dir = project_dir / "models"
-    results_dir = project_dir / "results"
     models_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    print("=" * 60)
-    print("HUAN LUYEN MO HINH - COLOR CORRELOGRAM PROJECT")
-    print("=" * 60)
+    print('=' * 60)
+    print('HUAN LUYEN MO HINH - COLOR CORRELOGRAM PROJECT')
+    print('=' * 60)
 
-    # Tai dac trung
     data = load_features(features_dir)
+    if not split_path.exists():
+        raise FileNotFoundError(
+            f'Khong tim thay split metadata: {split_path}. Hay chay python src/feature_extraction.py'
+        )
+
+    split_metadata = load_split_metadata(split_path)
+    split_indices = resolve_split_indices(data['image_paths'], paths['data_dir'], split_metadata)
+    train_idx = split_indices['train']
+    val_idx = split_indices['val']
+    train_val_idx = merge_split_indices(split_indices, ['train', 'val'])
     y = data['labels']
-    class_names = data['class_names']
+
+    print('\nSplit dang su dung:')
+    for split_name, idx in split_indices.items():
+        print(f'  - {split_name}: {len(idx)} mau')
 
     all_results = []
 
-    # ============================================================
-    # THI NGHIEM 1: Correlogram HSV + SVM (KET QUA CHINH)
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("THI NGHIEM 1: Color Correlogram (HSV) + SVM")
-    print("=" * 60)
-    model_svm, res_svm = train_svm(data['correlogram_hsv'], y)
-    res_svm['feature'] = 'Correlogram'
-    res_svm['color_space'] = 'HSV'
-    all_results.append(res_svm)
-    joblib.dump(model_svm, models_dir / "svm_correlogram_hsv.pkl")
+    for exp_idx, exp in enumerate(EXPERIMENTS, 1):
+        print('\n' + '=' * 60)
+        print(f"THI NGHIEM {exp_idx}: {exp['name']}")
+        print('=' * 60)
 
-    # ============================================================
-    # THI NGHIEM 2: Correlogram HSV + KNN
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("THI NGHIEM 2: Color Correlogram (HSV) + KNN")
-    print("=" * 60)
-    model_knn, res_knn = train_knn(data['correlogram_hsv'], y)
-    res_knn['feature'] = 'Correlogram'
-    res_knn['color_space'] = 'HSV'
-    all_results.append(res_knn)
-    joblib.dump(model_knn, models_dir / "knn_correlogram_hsv.pkl")
+        X = data[exp['feature_key']]
+        trainer = get_trainer(exp['trainer'])
+        tuned_model, train_info = trainer(X[train_idx], y[train_idx])
 
-    # ============================================================
-    # THI NGHIEM 3: Correlogram HSV + Random Forest
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("THI NGHIEM 3: Color Correlogram (HSV) + Random Forest")
-    print("=" * 60)
-    model_rf, res_rf = train_rf(data['correlogram_hsv'], y)
-    res_rf['feature'] = 'Correlogram'
-    res_rf['color_space'] = 'HSV'
-    all_results.append(res_rf)
-    joblib.dump(model_rf, models_dir / "rf_correlogram_hsv.pkl")
+        y_val_pred = tuned_model.predict(X[val_idx])
+        val_summary = metric_summary(y[val_idx], y_val_pred)
+        print(f"  Validation accuracy: {val_summary['accuracy']:.4f}")
+        print(f"  Validation precision: {val_summary['precision']:.4f}")
+        print(f"  Validation recall: {val_summary['recall']:.4f}")
+        print(f"  Validation f1: {val_summary['f1_score']:.4f}")
 
-    # ============================================================
-    # THI NGHIEM 4: Histogram HSV + SVM (BASELINE)
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("THI NGHIEM 4: Color Histogram (HSV) + SVM [BASELINE]")
-    print("=" * 60)
-    model_hist, res_hist = train_svm(data['histogram_hsv'], y)
-    res_hist['feature'] = 'Histogram'
-    res_hist['color_space'] = 'HSV'
-    all_results.append(res_hist)
-    joblib.dump(model_hist, models_dir / "svm_histogram_hsv.pkl")
+        final_model = clone(tuned_model)
+        final_model.fit(X[train_val_idx], y[train_val_idx])
 
-    # ============================================================
-    # THI NGHIEM 5: Correlogram RGB + SVM
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("THI NGHIEM 5: Color Correlogram (RGB) + SVM")
-    print("=" * 60)
-    model_rgb, res_rgb = train_svm(data['correlogram_rgb'], y)
-    res_rgb['feature'] = 'Correlogram'
-    res_rgb['color_space'] = 'RGB'
-    all_results.append(res_rgb)
-    joblib.dump(model_rgb, models_dir / "svm_correlogram_rgb.pkl")
+        model_path = models_dir / exp['model_file']
+        joblib.dump(final_model, model_path)
 
-    # ============================================================
-    # TONG KET
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("TONG KET KET QUA")
-    print("=" * 60)
-    print(f"\n{'#':<4} {'Feature':<14} {'Color':<6} {'Model':<8} {'CV Acc':<10} {'Time':<8}")
-    print("-" * 55)
+        metadata = {
+            'experiment_name': exp['name'],
+            'feature': exp['feature'],
+            'feature_key': exp['feature_key'],
+            'color_space': exp['color_space'],
+            'model': train_info['model'],
+            'best_params': {k: str(v) for k, v in train_info['best_params'].items()},
+            'split_file': str(split_path),
+            'split_counts': {name: int(len(idx)) for name, idx in split_indices.items()},
+            'tuning_split': 'train',
+            'validation_split': 'val',
+            'final_training_split': 'train+val',
+            'held_out_test_split': 'test',
+            'retrieval_split': 'train+val',
+            'train_cv_accuracy': train_info['train_cv_accuracy'],
+            'validation_summary': val_summary,
+        }
+        save_model_metadata(models_dir / f'{model_path.stem}.meta.json', metadata)
+
+        result = {
+            'experiment_name': exp['name'],
+            'model': train_info['model'],
+            'feature': exp['feature'],
+            'color_space': exp['color_space'],
+            'train_cv_accuracy': train_info['train_cv_accuracy'],
+            'validation_accuracy': val_summary['accuracy'],
+            'validation_precision': val_summary['precision'],
+            'validation_recall': val_summary['recall'],
+            'validation_f1_score': val_summary['f1_score'],
+            'time': train_info['time'],
+            'split_file': str(split_path),
+            'best_params': {k: str(v) for k, v in train_info['best_params'].items()},
+        }
+        all_results.append(result)
+
+    print('\n' + '=' * 60)
+    print('TONG KET KET QUA')
+    print('=' * 60)
+    print(f"\n{'#':<4} {'Feature':<18} {'Color':<6} {'Model':<14} {'TrainCV':<10} {'ValAcc':<10}")
+    print('-' * 75)
     for i, r in enumerate(all_results, 1):
-        print(f"{i:<4} {r['feature']:<14} {r['color_space']:<6} {r['model']:<8} "
-              f"{r['cv_accuracy']:.4f}    {r['time']:.1f}s")
+        print(
+            f"{i:<4} {r['feature']:<18} {r['color_space']:<6} {r['model']:<14} "
+            f"{r['train_cv_accuracy']:.4f}    {r['validation_accuracy']:.4f}"
+        )
 
-    # Luu ket qua tong hop
-    import json
-    results_summary = []
-    for r in all_results:
-        summary = {k: v for k, v in r.items() if k != 'best_params'}
-        summary['best_params'] = {k: str(v) for k, v in r['best_params'].items()}
-        results_summary.append(summary)
-
-    with open(results_dir / "training_results.json", 'w', encoding='utf-8') as f:
-        json.dump(results_summary, f, indent=2, ensure_ascii=False)
+    with open(results_dir / 'training_results.json', 'w', encoding='utf-8') as f:
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
 
     print(f"\nDa luu model vao: {models_dir}")
     print(f"Da luu ket qua vao: {results_dir / 'training_results.json'}")
+    print('\n' + '=' * 60)
+    print('HUAN LUYEN HOAN TAT!')
+    print('=' * 60)
 
-    print("\n" + "=" * 60)
-    print("HUAN LUYEN HOAN TAT!")
-    print("=" * 60)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

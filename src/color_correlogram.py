@@ -152,21 +152,40 @@ def auto_correlogram_fast(quantized_img, n_colors, distances=None):
     return correlogram.flatten()
 
 
-def extract_correlogram_feature(img_bgr, color_space='hsv',
-                                 h_bins=8, s_bins=3, v_bins=3,
-                                 rgb_bins=4, distances=None):
-    """Ham tien ich: tu anh BGR goc -> vector dac trung correlogram.
+def spatial_correlogram(quantized_img, n_colors, distances=None, grid_size=2, include_global=True):
+    """Tinh correlogram co bo cuc khong gian don gian.
 
-    Args:
-        img_bgr: Anh BGR (numpy array)
-        color_space: 'hsv' hoac 'rgb'
-        h_bins, s_bins, v_bins: So bin cho HSV
-        rgb_bins: So bin cho RGB
-        distances: List khoang cach
+    Vector dau ra la phep noi:
+    - Correlogram toan anh
+    - Correlogram cua tung o trong luoi `grid_size x grid_size`
 
-    Returns:
-        feature: Vector dac trung 1 chieu
+    Cach lam nay giu lai thong tin mau, dong thoi bo sung vi tri tuong doi
+    de phan biet cac lop co mau gan nhau nhung bo cuc khac nhau.
     """
+    features = []
+
+    if include_global:
+        features.append(auto_correlogram_fast(quantized_img, n_colors, distances))
+
+    h, w = quantized_img.shape
+    row_edges = np.linspace(0, h, grid_size + 1, dtype=np.int32)
+    col_edges = np.linspace(0, w, grid_size + 1, dtype=np.int32)
+
+    for row_idx in range(grid_size):
+        for col_idx in range(grid_size):
+            patch = quantized_img[
+                row_edges[row_idx]:row_edges[row_idx + 1],
+                col_edges[col_idx]:col_edges[col_idx + 1]
+            ]
+            features.append(auto_correlogram_fast(patch, n_colors, distances))
+
+    return np.concatenate(features)
+
+
+def _quantize_image_for_correlogram(img_bgr, color_space='hsv',
+                                    h_bins=8, s_bins=3, v_bins=3,
+                                    rgb_bins=4):
+    """Luong tu hoa anh ve ma mau de tinh correlogram."""
     import cv2
 
     if color_space == 'hsv':
@@ -180,8 +199,9 @@ def extract_correlogram_feature(img_bgr, color_space='hsv',
         s_q = np.clip(s * s_bins // 256, 0, s_bins - 1).astype(np.int32)
         v_q = np.clip(v * v_bins // 256, 0, v_bins - 1).astype(np.int32)
         quantized = h_q * (s_bins * v_bins) + s_q * v_bins + v_q
+        return quantized, n_colors
 
-    elif color_space == 'rgb':
+    if color_space == 'rgb':
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         n_colors = rgb_bins ** 3
 
@@ -189,8 +209,46 @@ def extract_correlogram_feature(img_bgr, color_space='hsv',
         g = np.clip(img_rgb[:, :, 1].astype(np.int32) * rgb_bins // 256, 0, rgb_bins - 1).astype(np.int32)
         b = np.clip(img_rgb[:, :, 2].astype(np.int32) * rgb_bins // 256, 0, rgb_bins - 1).astype(np.int32)
         quantized = r * (rgb_bins * rgb_bins) + g * rgb_bins + b
-    else:
-        raise ValueError(f"color_space phai la 'hsv' hoac 'rgb', khong phai '{color_space}'")
+        return quantized, n_colors
+
+    raise ValueError(f"color_space phai la 'hsv' hoac 'rgb', khong phai '{color_space}'")
+
+
+def extract_correlogram_feature(img_bgr, color_space='hsv',
+                                h_bins=8, s_bins=3, v_bins=3,
+                                rgb_bins=4, distances=None,
+                                spatial_grid=None, include_global=True):
+    """Ham tien ich: tu anh BGR goc -> vector dac trung correlogram.
+
+    Args:
+        img_bgr: Anh BGR (numpy array)
+        color_space: 'hsv' hoac 'rgb'
+        h_bins, s_bins, v_bins: So bin cho HSV
+        rgb_bins: So bin cho RGB
+        distances: List khoang cach
+        spatial_grid: Neu khac None, noi them correlogram cua luoi spatial_grid x spatial_grid
+        include_global: Co giu correlogram toan anh o dau vector hay khong
+
+    Returns:
+        feature: Vector dac trung 1 chieu
+    """
+    quantized, n_colors = _quantize_image_for_correlogram(
+        img_bgr,
+        color_space=color_space,
+        h_bins=h_bins,
+        s_bins=s_bins,
+        v_bins=v_bins,
+        rgb_bins=rgb_bins,
+    )
+
+    if spatial_grid is not None:
+        return spatial_correlogram(
+            quantized,
+            n_colors,
+            distances=distances,
+            grid_size=spatial_grid,
+            include_global=include_global,
+        )
 
     return auto_correlogram_fast(quantized, n_colors, distances)
 

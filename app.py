@@ -4,6 +4,7 @@ app.py - Ung dung demo Streamlit cho Color Correlogram Image Recognition
 Chay: streamlit run app.py
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from color_correlogram import extract_correlogram_feature
+from dataset_split import load_split_metadata, merge_split_indices, resolve_split_indices
 from experiment_runner import EVAL_LABELS, run_experiment
 
 
@@ -26,14 +28,15 @@ MODELS_DIR = PROJECT_DIR / "models"
 
 MODEL_CONFIGS = {
     'hsv': {
-        'label': 'HSV',
-        'model_file': 'svm_correlogram_hsv.pkl',
-        'features_file': 'correlogram_hsv.npy',
-        'sidebar_message': 'Model HSV duoc train co dinh voi H=8, S=3, V=3.',
+        'label': 'HSV Spatial',
+        'model_file': 'svm_correlogram_hsv_spatial.pkl',
+        'features_file': 'correlogram_hsv_spatial.npy',
+        'sidebar_message': 'Model HSV dung spatial correlogram: vector toan anh + 4 o 2x2.',
         'h_bins': 8,
         's_bins': 3,
         'v_bins': 3,
         'rgb_bins': 4,
+        'spatial_grid': 2,
     },
     'rgb': {
         'label': 'RGB',
@@ -44,6 +47,7 @@ MODEL_CONFIGS = {
         's_bins': 3,
         'v_bins': 3,
         'rgb_bins': 4,
+        'spatial_grid': None,
     }
 }
 
@@ -61,13 +65,19 @@ def load_model_and_data(color_space):
     config = MODEL_CONFIGS[color_space]
     model_path = MODELS_DIR / config['model_file']
     if not model_path.exists():
-        return None, None, None
+        return None, None, None, None
 
     class_names = load_class_names()
     if class_names is None:
-        return None, None, None
+        return None, None, None, None
 
     model = joblib.load(model_path)
+    metadata_path = MODELS_DIR / f"{model_path.stem}.meta.json"
+    model_metadata = None
+    if metadata_path.exists():
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            model_metadata = json.load(f)
+
     paths_file = FEATURES_DIR / "image_paths.npy"
     features_file = FEATURES_DIR / config['features_file']
 
@@ -77,7 +87,16 @@ def load_model_and_data(color_space):
         image_paths = np.load(paths_file, allow_pickle=True)
         db_features = np.load(features_file)
 
-    return model, class_names, (image_paths, db_features)
+        if model_metadata and model_metadata.get('retrieval_split') == 'train+val':
+            split_file = model_metadata.get('split_file')
+            if split_file and Path(split_file).exists():
+                split_metadata = load_split_metadata(split_file)
+                split_indices = resolve_split_indices(image_paths, split_metadata['data_dir'], split_metadata)
+                retrieval_idx = merge_split_indices(split_indices, ['train', 'val'])
+                image_paths = image_paths[retrieval_idx]
+                db_features = db_features[retrieval_idx]
+
+    return model, class_names, (image_paths, db_features), model_metadata
 
 
 def find_similar_images(query_feat, db_features, image_paths, top_k=3):
@@ -86,7 +105,10 @@ def find_similar_images(query_feat, db_features, image_paths, top_k=3):
 
     distances = cdist([query_feat], db_features, metric='cosine')[0]
     indices = np.argsort(distances)[:top_k]
-    return [(image_paths[i], distances[i]) for i in indices]
+    return [
+        (image_paths[i], Path(image_paths[i]).parent.name, distances[i])
+        for i in indices
+    ]
 
 
 def render_summary_metrics(summary):
@@ -110,6 +132,7 @@ def render_prediction_tab():
     """Tab nhan dang anh bang model da train san."""
     st.subheader("🎯 Nhan dang anh")
     st.markdown("Chon khong gian mau dung voi model da train, sau do upload anh de du doan.")
+    st.info("Model chi hoc tren 10 lop cua Corel-1K. Anh Internet khac phan phoi du lieu co the duoc gan vao lop gan nhat thay vi dung nghia that.")
 
     color_space_label = st.selectbox("Khong gian mau", ["HSV", "RGB"], key="predict_color_space")
     color_space = color_space_label.lower()
@@ -125,7 +148,7 @@ def render_prediction_tab():
 
     st.caption(config['sidebar_message'])
 
-    model, class_names, db_data = load_model_and_data(color_space)
+    model, class_names, db_data, model_metadata = load_model_and_data(color_space)
     if model is None:
         st.error("❌ Chua co model hoac feature files can thiet. Hay chay:")
         st.code("""
@@ -139,6 +162,20 @@ streamlit run app.py
     with st.expander("Danh sach cac lop nhan dang"):
         for i, name in enumerate(class_names, 1):
             st.write(f"{i}. {name}")
+
+    if model_metadata:
+        st.caption(
+            f"Model nay duoc tune tren `{model_metadata.get('tuning_split', 'train')}`, "
+            f"refit tren `{model_metadata.get('final_training_split', 'train+val')}`, "
+            f"va giu rieng `{model_metadata.get('held_out_test_split', 'test')}` de danh gia."
+        )
+        split_counts = model_metadata.get('split_counts')
+        if isinstance(split_counts, dict):
+            st.write({
+                'split_counts': split_counts,
+                'split_file': model_metadata.get('split_file'),
+                'retrieval_split': model_metadata.get('retrieval_split'),
+            })
 
     uploaded_file = st.file_uploader(
         "📁 Upload anh can nhan dang",
@@ -167,6 +204,7 @@ streamlit run app.py
             s_bins=config['s_bins'],
             v_bins=config['v_bins'],
             rgb_bins=config['rgb_bins'],
+            spatial_grid=config['spatial_grid'],
         )
 
     with col2:
@@ -190,20 +228,34 @@ streamlit run app.py
     with st.spinner("Dang du doan..."):
         prediction = model.predict([feat])
         predicted_class = class_names[prediction[0]]
+        proba = model.predict_proba([feat])[0] if hasattr(model, "predict_proba") else None
 
-    st.success(f"**Lop du doan: {predicted_class}**")
+    if proba is not None:
+        confidence = float(proba[prediction[0]])
+        if confidence < 0.5:
+            st.warning(f"Du doan do tin cay thap: **{predicted_class}** ({confidence:.1%})")
+        else:
+            st.success(f"**Lop du doan: {predicted_class}** ({confidence:.1%})")
+
+        top_indices = np.argsort(proba)[::-1][:3]
+        st.caption(
+            "Top-3 lop gan nhat: " +
+            " | ".join(f"{class_names[idx]}: {proba[idx]:.1%}" for idx in top_indices)
+        )
+    else:
+        st.success(f"**Lop du doan: {predicted_class}**")
 
     if db_data[0] is not None and db_data[1] is not None:
         st.subheader("🔍 Anh tuong tu trong database")
         try:
             similar = find_similar_images(feat, db_data[1], db_data[0], top_k=5)
             cols = st.columns(5)
-            for i, (path, dist) in enumerate(similar):
+            for i, (path, label, dist) in enumerate(similar):
                 if os.path.exists(path):
                     sim_img = cv2.imread(path)
                     sim_img = cv2.cvtColor(sim_img, cv2.COLOR_BGR2RGB)
                     with cols[i]:
-                        st.image(sim_img, caption=f"d={dist:.3f}", width=120)
+                        st.image(sim_img, caption=f"{label} | d={dist:.3f}", width=120)
         except Exception as e:
             st.warning(f"Khong the tim anh tuong tu: {e}")
 
@@ -250,17 +302,25 @@ def render_experiment_table(report_dict):
 
 
 def render_evaluation_controls():
-    """Lay cau hinh thi nghiem tu UI."""
+    """Lay cau hinh danh gia tren held-out test."""
     top_cols = st.columns(4)
-    feature = top_cols[0].selectbox("Feature", ['correlogram', 'histogram'], key="eval_feature")
-    color = top_cols[1].selectbox("Color space", ['hsv', 'rgb'], key="eval_color")
-    model_name = top_cols[2].selectbox("Model", ['svm', 'knn'], key="eval_model")
-    eval_method = top_cols[3].selectbox(
-        "Evaluation",
-        list(EVAL_LABELS.keys()),
-        format_func=lambda key: EVAL_LABELS[key],
-        key="eval_method",
+    feature = top_cols[0].selectbox(
+        "Feature",
+        ['spatial_correlogram', 'correlogram', 'histogram'],
+        format_func=lambda value: {
+            'spatial_correlogram': 'Spatial Correlogram',
+            'correlogram': 'Correlogram',
+            'histogram': 'Histogram',
+        }[value],
+        key="eval_feature",
     )
+    if feature == 'spatial_correlogram':
+        color = 'hsv'
+        top_cols[1].write("**Color space:** HSV")
+    else:
+        color = top_cols[1].selectbox("Color space", ['hsv', 'rgb'], key="eval_color")
+    model_name = top_cols[2].selectbox("Model", ['svm', 'knn'], key="eval_model")
+    top_cols[3].write(f"**Evaluation:** {EVAL_LABELS['independent_test']}")
 
     params = {
         'test_size': 0.2,
@@ -270,30 +330,15 @@ def render_evaluation_controls():
         'sample_ratio': 0.8,
         'random_state': 42,
     }
-
-    param_cols = st.columns(3)
-    if eval_method in ('holdout', 'stratified_holdout', 'repeated_holdout'):
-        params['test_size'] = param_cols[0].slider("Test size", min_value=0.1, max_value=0.4, value=0.2, step=0.05)
-    if eval_method == 'kfold':
-        params['k'] = int(param_cols[0].number_input("So fold (k)", min_value=2, max_value=10, value=5, step=1))
-    if eval_method == 'repeated_holdout':
-        params['n_repeats'] = int(param_cols[1].number_input("So lan lap", min_value=2, max_value=30, value=10, step=1))
-    if eval_method == 'bootstrap':
-        params['n_iterations'] = int(param_cols[0].number_input("So bootstrap iterations", min_value=5, max_value=100, value=30, step=5))
-        params['sample_ratio'] = param_cols[1].slider("Ti le mau bootstrap", min_value=0.5, max_value=0.95, value=0.8, step=0.05)
-    if eval_method == 'leave_one_out':
-        st.warning("Leave-One-Out rat cham vi phai train lai gan bang so luong anh trong dataset.")
-
-    params['random_state'] = int(param_cols[2].number_input("Random state", min_value=0, max_value=9999, value=42, step=1))
-    return feature, color, model_name, eval_method, params
+    return feature, color, model_name, 'independent_test', params
 
 
 def render_evaluation_tab():
-    """Tab danh gia mo hinh linh hoat."""
-    st.subheader("🧪 Danh gia mo hinh linh hoat")
+    """Tab danh gia final tren held-out test."""
+    st.subheader("🧪 Danh gia mo hinh tren tap test doc lap")
     st.markdown(
-        "Chon feature, khong gian mau, model va phuong phap danh gia. "
-        "Ket qua se hien thi ngay tren UI va duoc luu vao `results/`."
+        "Tab nay chi bao cao ket qua tren split `test` doc lap. "
+        "Model duoc tune tren `train`, doi chieu tren `val`, roi refit tren `train+val` truoc khi cham tren `test`."
     )
 
     feature, color, model_name, eval_method, params = render_evaluation_controls()
@@ -337,9 +382,17 @@ def render_evaluation_tab():
     st.write("**Thong tin du lieu**")
     st.write({
         'dataset_shape': result['dataset_shape'],
+        'evaluation_dataset_shape': result.get('evaluation_dataset_shape'),
         'class_count': result['class_count'],
         'feature_file': result['feature_file'],
     })
+    if result.get('evaluation_details'):
+        st.write({
+            'split_file': result['evaluation_details'].get('split_file'),
+            'split_counts': result['evaluation_details'].get('split_counts'),
+            'validation_summary': result['evaluation_details'].get('validation_summary'),
+            'final_training_split': result['evaluation_details'].get('final_training_split'),
+        })
 
     st.subheader("📋 Classification report")
     render_experiment_table(result['classification_report'])
@@ -364,7 +417,7 @@ def main():
 
         Ung dung nay gom 2 phan:
         1. **Nhan dang anh** bang model da train san.
-        2. **Danh gia mo hinh linh hoat** theo feature / color space / model / evaluation method.
+        2. **Danh gia mo hinh** tren tap `test` doc lap voi provenance split ro rang.
         """
     )
 

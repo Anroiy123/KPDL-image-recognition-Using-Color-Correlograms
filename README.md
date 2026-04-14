@@ -18,11 +18,13 @@ Pipeline hiện tại của dự án:
 2. Lượng tử hóa màu trong không gian **HSV** hoặc **RGB**.
 3. Trích xuất đặc trưng:
    - `Correlogram HSV`: `72 x 4 = 288` chiều
+   - `Spatial Correlogram HSV`: `(1 + 2x2) x 72 x 4 = 1440` chiều
    - `Correlogram RGB`: `256` chiều
    - `Histogram HSV`: `72` chiều
 4. Huấn luyện các mô hình học máy với `GridSearchCV`.
-5. Đánh giá bằng `Accuracy`, `Precision`, `Recall`, `F1-score`, `Classification Report`, `Confusion Matrix`.
-6. Chạy demo Streamlit để dự đoán lớp ảnh và tìm ảnh tương tự trong tập dữ liệu.
+5. Tạo split cố định `train/val/test` để tách riêng dữ liệu huấn luyện, chọn mô hình, và kiểm tra cuối.
+6. Đánh giá bằng `Accuracy`, `Precision`, `Recall`, `F1-score`, `Classification Report`, `Confusion Matrix` trên tập `test` độc lập.
+7. Chạy demo Streamlit để dự đoán lớp ảnh và tìm ảnh tương tự trong tập không dùng `test` để train model.
 
 ## 2. Cấu trúc thư mục
 
@@ -30,6 +32,7 @@ Pipeline hiện tại của dự án:
 KPDL/
 ├── data/
 │   ├── corel-1k/                # Dataset Corel-1K, mỗi lớp là một thư mục con
+│   ├── splits/                  # Metadata split train/val/test
 │   └── features/                # Đặc trưng đã trích xuất (.npy)
 ├── models/                      # Model đã huấn luyện (.pkl)
 ├── notebooks/                   # Notebook minh họa và phân tích
@@ -143,33 +146,41 @@ python src/feature_extraction.py
 
 Script này sẽ:
 - Load toàn bộ dataset.
-- Tạo 3 bộ đặc trưng:
+- Tạo 5 bộ đặc trưng:
   - `correlogram_hsv.npy`
+  - `correlogram_hsv_spatial.npy`
   - `correlogram_rgb.npy`
   - `histogram_hsv.npy`
+  - `histogram_rgb.npy`
 - Đồng thời lưu:
   - `labels.npy`
   - `class_names.npy`
   - `image_paths.npy`
+  - `data/splits/corel-1k_split.json`
 
 Các file sinh ra trong `data/features/` và shape hiện tại trong repo là:
 
 ```text
 correlogram_hsv.npy : (1000, 288)
+correlogram_hsv_spatial.npy : (1000, 1440)
 correlogram_rgb.npy : (1000, 256)
 histogram_hsv.npy   : (1000, 72)
+histogram_rgb.npy   : (1000, 64)
 labels.npy          : (1000,)
 class_names.npy     : (10,)
 image_paths.npy     : (1000,)
 ```
 
 Ý nghĩa:
-- `correlogram_hsv.npy`: đặc trưng chính dùng cho mô hình tốt nhất.
+- `correlogram_hsv_spatial.npy`: đặc trưng chính dùng cho mô hình demo tốt nhất.
+- `correlogram_hsv.npy`: đặc trưng correlogram HSV toàn ảnh để so sánh.
 - `correlogram_rgb.npy`: biến thể so sánh theo không gian màu RGB.
 - `histogram_hsv.npy`: baseline để so sánh với Correlogram.
+- `histogram_rgb.npy`: baseline histogram trong không gian RGB cho các thí nghiệm linh hoạt.
 - `labels.npy`: nhãn lớp của từng ảnh.
 - `class_names.npy`: danh sách tên lớp.
 - `image_paths.npy`: đường dẫn ảnh gốc, dùng để tìm ảnh tương tự trong demo.
+- `data/splits/corel-1k_split.json`: split cố định `train/val/test` dùng chung cho train, evaluation và app.
 
 ### Bước 3. Huấn luyện mô hình
 
@@ -179,19 +190,28 @@ Chạy:
 python src/train.py
 ```
 
-Script `src/train.py` hiện huấn luyện 5 thí nghiệm:
+Script `src/train.py` hiện huấn luyện 6 thí nghiệm:
+- `Spatial Correlogram HSV + SVM`
 - `Correlogram HSV + SVM`
 - `Correlogram HSV + KNN`
 - `Correlogram HSV + Random Forest`
 - `Histogram HSV + SVM`
 - `Correlogram RGB + SVM`
 
+Workflow của `src/train.py`:
+- Tune hyperparameter chỉ trên `train`
+- Đo tạm trên `val`
+- Refit model cuối trên `train+val`
+- Không dùng `test` trong huấn luyện
+
 Model được lưu tại `models/`:
+- `svm_correlogram_hsv_spatial.pkl`
 - `svm_correlogram_hsv.pkl`
 - `knn_correlogram_hsv.pkl`
 - `rf_correlogram_hsv.pkl`
 - `svm_histogram_hsv.pkl`
 - `svm_correlogram_rgb.pkl`
+- `*.meta.json`: metadata provenance, split file và split dùng để train model
 
 Kết quả tổng hợp của quá trình train được lưu tại:
 
@@ -209,8 +229,9 @@ python src/evaluate.py
 
 Script `src/evaluate.py` sẽ:
 - Load feature từ `data/features/`
+- Load split metadata từ `data/splits/corel-1k_split.json`
 - Load model từ `models/`
-- Tạo dự đoán bằng cross-validation
+- Chỉ tạo dự đoán trên tập `test` độc lập
 - Tính các chỉ số:
   - `Accuracy`
   - `Precision`
@@ -234,15 +255,18 @@ streamlit run app.py
 ```
 
 Ứng dụng `app.py` sẽ:
-- Load model `models/svm_correlogram_hsv.pkl`
+- Load model `models/svm_correlogram_hsv_spatial.pkl`
+- Load metadata `models/svm_correlogram_hsv_spatial.meta.json`
 - Load `class_names.npy`
-- Load `image_paths.npy` và `correlogram_hsv.npy` để tìm ảnh tương tự
+- Load `image_paths.npy` và `correlogram_hsv_spatial.npy` để tìm ảnh tương tự trong split `train+val`
 - Cho phép upload ảnh để dự đoán lớp
 - Hiển thị vector đặc trưng Correlogram
 - Hiển thị các ảnh gần nhất trong tập dữ liệu nếu có đủ dữ liệu phụ trợ
 
 Lưu ý quan trọng:
-- Model demo mặc định được huấn luyện với **HSV 8x3x3**.
+- Model demo mặc định được huấn luyện với **HSV 8x3x3 + spatial grid 2x2**.
+- Ứng dụng sẽ hiển thị thêm độ tin cậy dự đoán và provenance split của model.
+- Ảnh ngoài tập 10 lớp Corel-1K có thể bị ép vào lớp gần nhất, ngay cả khi pipeline đánh giá đã chuẩn hơn.
 - Nếu bạn thay đổi `color_space` hoặc các tham số `H bins`, `S bins`, `V bins` trên sidebar, vector đặc trưng có thể không khớp kích thước với model đã train.
 - Khi đó ứng dụng có thể báo lỗi dự đoán và yêu cầu dùng lại tham số gốc.
 
@@ -250,6 +274,9 @@ Lưu ý quan trọng:
 
 ### `data/features/`
 Chứa đặc trưng đã trích xuất để tránh phải tính lại từ đầu mỗi lần huấn luyện.
+
+### `data/splits/`
+Chứa split metadata cố định để đảm bảo train, validation và final test luôn dùng đúng cùng một phép chia dữ liệu.
 
 ### `models/`
 Chứa các model `.pkl` đã huấn luyện. Đây là đầu vào bắt buộc để `app.py` dự đoán được.
@@ -283,6 +310,7 @@ Kết quả được lưu trong `results/training_results.json` và `results/eva
 
 | Phương pháp | Accuracy | Precision | Recall | F1-score |
 | --- | ---: | ---: | ---: | ---: |
+| Spatial Correlogram HSV + SVM | 87.5% | 0.8740 | 0.8750 | 0.8735 |
 | Correlogram HSV + SVM | 85.3% | 0.8560 | 0.8530 | 0.8528 |
 | Correlogram HSV + KNN | 79.8% | 0.8192 | 0.7980 | 0.7926 |
 | Correlogram HSV + Random Forest | 85.2% | 0.8515 | 0.8520 | 0.8498 |
@@ -290,7 +318,7 @@ Kết quả được lưu trong `results/training_results.json` và `results/eva
 | Correlogram RGB + SVM | 82.9% | 0.8295 | 0.8290 | 0.8284 |
 
 Nhận xét nhanh:
-- **Correlogram HSV + SVM** là cấu hình tốt nhất trong các thí nghiệm hiện có.
+- **Spatial Correlogram HSV + SVM** là cấu hình tốt nhất trong các thí nghiệm hiện có.
 - **Correlogram HSV** cho kết quả tốt hơn **Histogram HSV**, cho thấy thông tin tương quan không gian màu có ích cho bài toán này.
 - Biến thể **RGB** vẫn hoạt động tốt, nhưng kém hơn cấu hình **HSV** tốt nhất.
 
@@ -300,9 +328,10 @@ Các chi tiết chính trong phương pháp hiện tại:
 - Không gian màu chính: `HSV`
 - Lượng tử hóa HSV: `8 x 3 x 3 = 72` màu
 - Khoảng cách correlogram: `{1, 3, 5, 7}`
-- Vector đặc trưng chính: `288` chiều
-- Mô hình chính: `SVM` với `RBF kernel`
-- Phương pháp đánh giá: `5-fold cross-validation`
+- Vector đặc trưng chính: `1440` chiều (`Spatial Correlogram HSV`)
+- Mô hình demo chính: `SVM`
+- Tách dữ liệu: `train/val/test = 70/15/15`
+- Phương pháp đánh giá cuối: `held-out test` trên split cố định
 
 ## 11. Lỗi thường gặp và cách xử lý
 
