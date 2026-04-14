@@ -19,28 +19,14 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from color_correlogram import extract_correlogram_feature
-from dataset_profile import (
-    DEFAULT_DATASET_PROFILE,
-    DATASET_PROFILES,
-    list_dataset_profiles,
-    resolve_dataset_profile,
-    resolve_scoped_or_legacy_path,
-    scoped_artifact_name,
-)
-from dataset_split import load_split_metadata, resolve_split_indices, validate_split_metadata
+from dataset_profile import DEFAULT_DATASET_PROFILE
+from dataset_split import load_split_metadata, resolve_split_indices
 from experiment_runner import EVAL_LABELS, run_experiment
 
 
 PROJECT_DIR = Path(__file__).parent
 FEATURES_DIR = PROJECT_DIR / "data" / "features"
 MODELS_DIR = PROJECT_DIR / "models"
-SPLITS_DIR = PROJECT_DIR / "data" / "splits"
-
-DATASET_PROFILE_OPTIONS = list_dataset_profiles()
-DATASET_PROFILE_LABELS = {
-    key: DATASET_PROFILES[key].get("display_name", key)
-    for key in DATASET_PROFILE_OPTIONS
-}
 
 MODEL_CONFIGS = {
     "hsv": {
@@ -87,19 +73,15 @@ EVAL_METHOD_LABELS_VI = {
     "bootstrap": "Bootstrap Sampling",
 }
 
-def get_eval_method_hints(split_filename):
-    return {
-        "independent_test": (
-            f"Benchmark: Tạo mới mô hình và train theo split cố định {split_filename}. "
-            "Sau đó đánh giá bằng tập test độc lập."
-        ),
-        "holdout": "Chia ngẫu nhiên train/test mới. Rất nhanh, nhưng độ ổn định phụ thuộc vào đợt chia.",
-        "stratified_holdout": "Sẽ tự động chia lại train/test và train mô hình mới ngay lúc này. Giữ tỉ lệ lớp ổn định.",
-        "repeated_holdout": "Lặp lại train từ đầu nhiều lần để lấy trung bình hiệu suất, giảm phụ thuộc may rủi.",
-        "kfold": "Cross-validation tiêu chuẩn. Chia K phần, train K mô hình, đánh giá ổn định trên toàn phổ.",
-        "leave_one_out": "Train N lần, test N lần. (Rất chậm, chỉ nên chạy khi thật sự rảnh).",
-        "bootstrap": "Khởi tạo và train lại nhiều lần dựa trên tập mẫu lấy có hoàn lại từ dataset.",
-    }
+EVAL_METHOD_HINTS = {
+    "independent_test": "Benchmark: Tạo mới mô hình và Train khớp theo đúng file corel-1k_split.json. Sau đó đánh giá bằng tập test độc lập.",
+    "holdout": "Chia ngẫu nhiên train/test mới. Rất nhanh, nhưng độ ổn định phụ thuộc vào đợt chia.",
+    "stratified_holdout": "Sẽ tự động chia lại train/test và train mô hình mới ngay lúc này. Giữ tỉ lệ lớp ổn định.",
+    "repeated_holdout": "Lặp lại train từ đầu nhiều lần để lấy trung bình hiệu suất, giảm phụ thuộc may rủi.",
+    "kfold": "Cross-validation tiêu chuẩn. Chia K phần, train K mô hình, đánh giá ổn định trên toàn phổ.",
+    "leave_one_out": "Train N lần, test N lần. (Rất chậm, chỉ nên chạy khi thật sự rảnh).",
+    "bootstrap": "Khởi tạo và train lại nhiều lần dựa trên tập mẫu lấy có hoàn lại từ dataset.",
+}
 
 
 THEME_PALETTES = {
@@ -632,54 +614,32 @@ def plot_feature_chart(feature_vector, title):
     return fig
 
 
-def get_dataset_profile_info(dataset_profile_key):
-    try:
-        return resolve_dataset_profile(dataset_profile_key, PROJECT_DIR)
-    except ValueError as exc:
-        st.error(str(exc))
-        return None
-
-
-def load_class_names(dataset_profile_key):
-    class_names_path, _ = resolve_scoped_or_legacy_path(FEATURES_DIR, dataset_profile_key, "class_names.npy")
+def load_class_names():
+    class_names_path = FEATURES_DIR / "class_names.npy"
     if not class_names_path.exists():
-        return None, None
-    return np.load(class_names_path, allow_pickle=True), class_names_path
+        return None
+    return np.load(class_names_path, allow_pickle=True)
 
 
-def load_model_and_data(dataset_profile_key, dataset_profile_info, color_space):
+def load_model_and_data(color_space):
     config = MODEL_CONFIGS[color_space]
-    model_path, _ = resolve_scoped_or_legacy_path(MODELS_DIR, dataset_profile_key, config["model_file"])
+    model_path = MODELS_DIR / config["model_file"]
     if not model_path.exists():
-        return None, None, None, None, f"Khong tim thay model: {model_path.name}"
+        return None, None, None, None
 
-    class_names, class_names_path = load_class_names(dataset_profile_key)
+    class_names = load_class_names()
     if class_names is None:
-        return None, None, None, None, (
-            "Chua co class_names cho dataset profile dang chon. "
-            f"Mong doi file: {scoped_artifact_name(dataset_profile_key, 'class_names.npy')}"
-        )
+        return None, None, None, None
 
+    model = joblib.load(model_path)
     metadata_path = MODELS_DIR / f"{model_path.stem}.meta.json"
     model_metadata = None
     if metadata_path.exists():
         with open(metadata_path, "r", encoding="utf-8") as file:
             model_metadata = json.load(file)
-        metadata_profile = model_metadata.get("dataset_profile")
-        metadata_dataset_name = model_metadata.get("dataset_name")
-        if metadata_profile and metadata_profile != dataset_profile_key:
-            return None, None, None, model_metadata, (
-                f"Model metadata profile '{metadata_profile}' khong khop profile dang chon '{dataset_profile_key}'."
-            )
-        if metadata_dataset_name and metadata_dataset_name != dataset_profile_info["dataset_name"]:
-            return None, None, None, model_metadata, (
-                f"Model metadata dataset '{metadata_dataset_name}' khong khop '{dataset_profile_info['dataset_name']}'."
-            )
 
-    model = joblib.load(model_path)
-
-    paths_file, _ = resolve_scoped_or_legacy_path(FEATURES_DIR, dataset_profile_key, "image_paths.npy")
-    features_file, _ = resolve_scoped_or_legacy_path(FEATURES_DIR, dataset_profile_key, config["features_file"])
+    paths_file = FEATURES_DIR / "image_paths.npy"
+    features_file = FEATURES_DIR / config["features_file"]
     image_paths = None
     db_features = None
     if paths_file.exists() and features_file.exists():
@@ -689,19 +649,12 @@ def load_model_and_data(dataset_profile_key, dataset_profile_info, color_space):
             split_file = model_metadata.get("split_file")
             if split_file and Path(split_file).exists():
                 split_metadata = load_split_metadata(split_file)
-                validate_split_metadata(split_metadata, expected_dataset_name=dataset_profile_info["dataset_name"])
                 split_indices = resolve_split_indices(image_paths, split_metadata["data_dir"], split_metadata)
                 retrieval_idx = split_indices["train"]
                 image_paths = image_paths[retrieval_idx]
                 db_features = db_features[retrieval_idx]
 
-    source_info = {
-        "model_path": str(model_path),
-        "class_names_path": str(class_names_path),
-        "features_path": str(features_file) if features_file.exists() else None,
-        "image_paths_path": str(paths_file) if paths_file.exists() else None,
-    }
-    return model, class_names, (image_paths, db_features), model_metadata, source_info
+    return model, class_names, (image_paths, db_features), model_metadata
 
 
 def find_similar_images(query_feat, db_features, image_paths, top_k=3):
@@ -731,31 +684,20 @@ def render_summary_metrics(summary):
         )
 
 
-def render_prediction_tab(dataset_profile_key, dataset_profile_info):
+def render_prediction_tab():
     render_section_header(
         "Nhận dạng",
         "Upload ảnh để dự đoán",
-        "Phần này đặt thao tác chính lên đầu: chọn mô hình, upload ảnh, xem kết quả và đối chiếu với ảnh gần nhất trong tập train của dataset profile đang chọn.",
+        "Phần này đặt thao tác chính lên đầu: chọn mô hình, upload ảnh, xem kết quả và đối chiếu với ảnh gần nhất trong tập train.",
     )
 
     color_space_label = st.selectbox("Không gian màu", ["HSV", "RGB"], key="predict_color_space")
     color_space = color_space_label.lower()
     config = MODEL_CONFIGS[color_space]
-    model, class_names, db_data, model_metadata, source_info = load_model_and_data(
-        dataset_profile_key,
-        dataset_profile_info,
-        color_space,
-    )
+    model, class_names, db_data, model_metadata = load_model_and_data(color_space)
     if model is None:
-        st.error("Chưa có mô hình hoặc file đặc trưng tương thích với dataset profile đã chọn.")
-        if isinstance(source_info, str):
-            st.caption(source_info)
-        st.code(
-            "pip install -r requirements.txt\n"
-            f"python src/feature_extraction.py --dataset-profile {dataset_profile_key}\n"
-            f"python src/train.py --dataset-profile {dataset_profile_key}\n"
-            "streamlit run app.py"
-        )
+        st.error("Chưa có mô hình hoặc file đặc trưng cần thiết.")
+        st.code("pip install -r requirements.txt\npython src/feature_extraction.py\npython src/train.py\nstreamlit run app.py")
         return
 
     top_cols = st.columns([1.15, 0.85])
@@ -775,11 +717,6 @@ def render_prediction_tab(dataset_profile_key, dataset_profile_info):
             quantization = f"H={config['h_bins']}, S={config['s_bins']}, V={config['v_bins']}"
         else:
             quantization = f"RGB bins = {config['rgb_bins']}"
-        render_summary_strip(
-            "Dataset profile",
-            f"{dataset_profile_info['display_name']} ({dataset_profile_key})",
-            primary=True,
-        )
         render_summary_strip("Mô hình đang dùng", f"{config['label']} | {quantization}", primary=True)
         retrieval_note = "Truy hồi trên train split nếu feature và image paths có sẵn."
         if model_metadata:
@@ -789,13 +726,7 @@ def render_prediction_tab(dataset_profile_key, dataset_profile_info):
                 f"test ở {model_metadata.get('held_out_test_split', 'test')}."
             )
         render_summary_strip("Nguồn gốc thí nghiệm", retrieval_note)
-        render_summary_strip(
-            "Phù hợp để demo",
-            f"Mô hình học trên {len(class_names)} lớp của {dataset_profile_info['display_name']}, nên ảnh ngoài miền dữ liệu gốc cần được diễn giải thận trọng.",
-        )
-        if isinstance(source_info, dict):
-            with st.expander("Nguồn artifact đang nạp", expanded=False):
-                render_metadata_dict(source_info)
+        render_summary_strip("Phù hợp để demo", "Mô hình học trên 10 lớp Corel-1K, nên ảnh ngoài miền dữ liệu gốc cần được diễn giải thận trọng.")
 
     aux_cols = st.columns([0.72, 0.28])
     with aux_cols[0]:
@@ -817,10 +748,7 @@ def render_prediction_tab(dataset_profile_key, dataset_profile_info):
         st.info("Tải một ảnh bất kỳ để hiển thị vector đặc trưng, lớp dự đoán và gallery ảnh tương tự.")
         return
 
-    st.info(
-        f"Mô hình chỉ học trên các lớp của {dataset_profile_info['display_name']}. "
-        "Ảnh ngoài miền dữ liệu gốc vẫn sẽ bị ép vào lớp gần nhất theo đặc trưng màu sắc."
-    )
+    st.info("Mô hình chỉ học trên 10 lớp của Corel-1K. Ảnh ngoài miền dữ liệu gốc vẫn sẽ bị ép vào lớp gần nhất theo đặc trưng màu sắc.")
 
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
@@ -927,18 +855,12 @@ def render_experiment_table(report_dict):
             )
 
 
-def render_evaluation_controls(dataset_profile_key, dataset_profile_info):
-    eval_method_hints = get_eval_method_hints(dataset_profile_info["split_filename"])
+def render_evaluation_controls():
     render_section_header(
         "Thực nghiệm Thuật toán / Pipeline",
         "Chọn kỹ thuật lượng giá thực nghiệm (Cross-validation / Resampling)",
         "Tại đây, hệ thống sẽ tự động khởi tạo dữ liệu, chia tách và train lại pipeline mô hình một cách linh hoạt (Dynamic Training) để đo độ ổn định của thuật toán tổng thể.",
         compact=True,
-    )
-    render_summary_strip(
-        "Dataset profile",
-        f"{dataset_profile_info['display_name']} ({dataset_profile_key}) | split: {dataset_profile_info['split_filename']}",
-        primary=True,
     )
     eval_method = st.selectbox(
         "Kỹ thuật lượng giá",
@@ -947,7 +869,7 @@ def render_evaluation_controls(dataset_profile_key, dataset_profile_info):
         format_func=lambda value: EVAL_METHOD_LABELS_VI[value],
         key="eval_method",
     )
-    render_summary_strip("Quy trình", eval_method_hints[eval_method], primary=(eval_method == "independent_test"))
+    render_summary_strip("Quy trình", EVAL_METHOD_HINTS[eval_method], primary=(eval_method == "independent_test"))
 
     top_cols = st.columns(4)
     feature = top_cols[0].selectbox(
@@ -1059,7 +981,7 @@ def render_evaluation_result(result, report_text):
             result["artifacts"]["confusion_matrix"],
         ]
     )
-    info_cols = st.columns(5)
+    info_cols = st.columns(4)
     with info_cols[0]:
         render_stat_card("Đặc trưng", str(result["feature"]))
     with info_cols[1]:
@@ -1068,8 +990,6 @@ def render_evaluation_result(result, report_text):
         render_stat_card("Mô hình", str(result["model"]).upper())
     with info_cols[3]:
         render_stat_card("Kỹ thuật", str(result["evaluation_label"]))
-    with info_cols[4]:
-        render_stat_card("Dataset", str(result.get("dataset_profile", "n/a")))
     render_summary_metrics(result["summary"])
 
     render_section_header(
@@ -1122,15 +1042,12 @@ def render_evaluation_result(result, report_text):
     st.image(result["artifacts"]["confusion_matrix"], use_container_width=True)
 
 
-def render_evaluation_tab(dataset_profile_key, dataset_profile_info):
-    feature, color, model_name, eval_method, params = render_evaluation_controls(
-        dataset_profile_key,
-        dataset_profile_info,
-    )
+def render_evaluation_tab():
+    feature, color, model_name, eval_method, params = render_evaluation_controls()
     if st.button("Chạy thí nghiệm", type="primary"):
         with st.spinner("Đang chạy thí nghiệm, vui lòng chờ..."):
             result, report_text = run_experiment(
-                dataset_profile_key=dataset_profile_key,
+                dataset_profile_key=DEFAULT_DATASET_PROFILE,
                 feature=feature,
                 color=color,
                 model_name=model_name,
@@ -1148,31 +1065,9 @@ def render_evaluation_tab(dataset_profile_key, dataset_profile_info):
     result = st.session_state.get("experiment_result")
     report_text = st.session_state.get("experiment_report_text")
     if not result or not report_text:
-        st.caption(
-            "Chọn cấu hình ở trên và bấm 'Chạy thí nghiệm' để hiển thị metric, "
-            f"report và confusion matrix cho profile {dataset_profile_key}."
-        )
+        st.caption("Chọn cấu hình ở trên và bấm 'Chạy thí nghiệm' để hiển thị metric, report và confusion matrix.")
         return
     render_evaluation_result(result, report_text)
-
-
-def sync_dataset_profile_state(selected_profile_key):
-    """Reset state khong tuong thich khi user doi dataset profile."""
-    previous_profile = st.session_state.get("_active_dataset_profile")
-    st.session_state["_active_dataset_profile"] = selected_profile_key
-
-    if previous_profile is None or previous_profile == selected_profile_key:
-        return
-
-    keys_to_reset = [
-        "experiment_result",
-        "experiment_report_text",
-        "predict_upload",
-    ]
-    for key in keys_to_reset:
-        st.session_state.pop(key, None)
-
-    st.rerun()
 
 
 def main():
@@ -1180,23 +1075,11 @@ def main():
     sync_theme_state()
     inject_custom_css()
     render_hero()
-    dataset_profile_key = st.selectbox(
-        "Dataset profile",
-        DATASET_PROFILE_OPTIONS,
-        index=DATASET_PROFILE_OPTIONS.index(DEFAULT_DATASET_PROFILE),
-        format_func=lambda value: DATASET_PROFILE_LABELS[value],
-        key="dataset_profile_key",
-    )
-    dataset_profile_info = get_dataset_profile_info(dataset_profile_key)
-    if dataset_profile_info is None:
-        return
-    sync_dataset_profile_state(dataset_profile_key)
-
     tab_predict, tab_evaluate = st.tabs(["Nhận dạng ảnh", "Thực nghiệm thuật toán"])
     with tab_predict:
-        render_prediction_tab(dataset_profile_key, dataset_profile_info)
+        render_prediction_tab()
     with tab_evaluate:
-        render_evaluation_tab(dataset_profile_key, dataset_profile_info)
+        render_evaluation_tab()
     st.markdown(
         """
         <div class="footer-note">

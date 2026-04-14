@@ -15,12 +15,6 @@ DATASET_PROFILES = {
         "data_dir": Path("data") / "corel-1k",
         "split_filename": "corel-1k_split.json",
     },
-    "ucmerced-landuse": {
-        "dataset_name": "ucmerced-landuse",
-        "display_name": "UCMerced LandUse",
-        "data_dir": Path("data") / "UCMerced_LandUse" / "Images",
-        "split_filename": "ucmerced-landuse_split.json",
-    },
 }
 
 
