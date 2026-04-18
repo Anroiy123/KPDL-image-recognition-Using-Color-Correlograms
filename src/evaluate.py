@@ -37,7 +37,6 @@ EXPERIMENTS = [
     ('SpatialCorrelogram_HSV_SVM', 'correlogram_hsv_spatial', 'svm_correlogram_hsv_spatial.pkl'),
     ('Correlogram_HSV_SVM', 'correlogram_hsv', 'svm_correlogram_hsv.pkl'),
     ('Correlogram_HSV_KNN', 'correlogram_hsv', 'knn_correlogram_hsv.pkl'),
-    ('Correlogram_HSV_RF', 'correlogram_hsv', 'rf_correlogram_hsv.pkl'),
     ('Histogram_HSV_SVM', 'histogram_hsv', 'svm_histogram_hsv.pkl'),
     ('Correlogram_RGB_SVM', 'correlogram_rgb', 'svm_correlogram_rgb.pkl'),
 ]
@@ -81,7 +80,6 @@ def plot_accuracy_comparison(results, save_path):
         ('SpatialCorrelogram', 'HSV', 'SVM'): '#1565C0',
         ('Correlogram', 'HSV', 'SVM'): '#2196F3',
         ('Correlogram', 'HSV', 'KNN'): '#4CAF50',
-        ('Correlogram', 'HSV', 'Random Forest'): '#FF9800',
         ('Histogram', 'HSV', 'SVM'): '#F44336',
         ('Correlogram', 'RGB', 'SVM'): '#9C27B0',
     }

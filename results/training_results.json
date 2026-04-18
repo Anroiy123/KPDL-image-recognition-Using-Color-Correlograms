@@ -5,7 +5,8 @@
     "feature": "SpatialCorrelogram",
     "color_space": "HSV",
     "train_cv_accuracy": 0.87625,
-    "time": 28.50441884994507,
+    "time": 43.30747890472412,
+    "dataset_profile": "corel-1k",
     "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
     "final_training_split": "train",
     "best_params": {
@@ -20,7 +21,8 @@
     "feature": "Correlogram",
     "color_space": "HSV",
     "train_cv_accuracy": 0.85,
-    "time": 3.313441753387451,
+    "time": 5.578762054443359,
+    "dataset_profile": "corel-1k",
     "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
     "final_training_split": "train",
     "best_params": {
@@ -35,7 +37,8 @@
     "feature": "Correlogram",
     "color_space": "HSV",
     "train_cv_accuracy": 0.78,
-    "time": 0.8157393932342529,
+    "time": 0.9001274108886719,
+    "dataset_profile": "corel-1k",
     "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
     "final_training_split": "train",
     "best_params": {
@@ -45,27 +48,13 @@
     }
   },
   {
-    "experiment_name": "Correlogram_HSV_RF",
-    "model": "Random Forest",
-    "feature": "Correlogram",
-    "color_space": "HSV",
-    "train_cv_accuracy": 0.8474999999999999,
-    "time": 5.361050128936768,
-    "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
-    "final_training_split": "train",
-    "best_params": {
-      "rf__max_depth": "None",
-      "rf__min_samples_split": "5",
-      "rf__n_estimators": "200"
-    }
-  },
-  {
     "experiment_name": "Histogram_HSV_SVM",
     "model": "SVM",
     "feature": "Histogram",
     "color_space": "HSV",
     "train_cv_accuracy": 0.7825,
-    "time": 1.8183660507202148,
+    "time": 1.7956726551055908,
+    "dataset_profile": "corel-1k",
     "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
     "final_training_split": "train",
     "best_params": {
@@ -80,7 +69,8 @@
     "feature": "Correlogram",
     "color_space": "RGB",
     "train_cv_accuracy": 0.825,
-    "time": 2.747797727584839,
+    "time": 2.586534261703491,
+    "dataset_profile": "corel-1k",
     "split_file": "C:\\Users\\hunga\\OneDrive\\Desktop\\project\\KPDL\\data\\splits\\corel-1k_split.json",
     "final_training_split": "train",
     "best_params": {

@@ -31,8 +31,8 @@ MODELS_DIR = PROJECT_DIR / "models"
 MODEL_CONFIGS = {
     "hsv": {
         "label": "HSV Spatial",
-        "model_file": "svm_correlogram_hsv_spatial.pkl",
-        "features_file": "correlogram_hsv_spatial.npy",
+        "model_file": "corel-1k_svm_correlogram_hsv_spatial.pkl",
+        "features_file": "corel-1k_correlogram_hsv_spatial.npy",
         "sidebar_message": "Mô hình HSV dùng spatial correlogram: vector toàn ảnh + 4 ô 2x2.",
         "h_bins": 8,
         "s_bins": 3,
@@ -42,7 +42,7 @@ MODEL_CONFIGS = {
     },
     "rgb": {
         "label": "RGB",
-        "model_file": "svm_correlogram_rgb.pkl",
+        "model_file": "corel-1k_svm_correlogram_rgb.pkl",
         "features_file": "correlogram_rgb.npy",
         "sidebar_message": "Mô hình RGB được huấn luyện cố định với RGB bins = 4.",
         "h_bins": 8,

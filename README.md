@@ -5,7 +5,7 @@
 Mục tiêu chính của repo:
 - Tiền xử lý và chuẩn hóa ảnh đầu vào.
 - Trích xuất đặc trưng **Color Correlogram** và **Color Histogram** để so sánh.
-- Huấn luyện các mô hình **SVM**, **KNN** và **Random Forest**.
+- Huấn luyện các mô hình **SVM** và **KNN**.
 - Đánh giá mô hình bằng nhiều chỉ số và trực quan hóa kết quả.
 - Cung cấp ứng dụng **Streamlit** để thử nhận dạng ảnh trực tiếp.
 
@@ -42,7 +42,7 @@ KPDL/
 │   ├── color_correlogram.py     # Cài đặt Color Correlogram
 │   ├── color_histogram.py       # Cài đặt Color Histogram
 │   ├── feature_extraction.py    # Trích xuất đặc trưng cho toàn bộ dataset
-│   ├── train.py                 # Huấn luyện SVM, KNN, Random Forest
+│   ├── train.py                 # Huấn luyện SVM và KNN
 │   └── evaluate.py              # Đánh giá mô hình và lưu biểu đồ
 ├── app.py                       # Ứng dụng Streamlit demo
 ├── requirements.txt             # Danh sách thư viện cần cài
@@ -190,11 +190,10 @@ Chạy:
 python src/train.py
 ```
 
-Script `src/train.py` hiện huấn luyện 6 thí nghiệm:
+Script `src/train.py` hiện huấn luyện 5 thí nghiệm:
 - `Spatial Correlogram HSV + SVM`
 - `Correlogram HSV + SVM`
 - `Correlogram HSV + KNN`
-- `Correlogram HSV + Random Forest`
 - `Histogram HSV + SVM`
 - `Correlogram RGB + SVM`
 
@@ -207,7 +206,6 @@ Model được lưu tại `models/`:
 - `svm_correlogram_hsv_spatial.pkl`
 - `svm_correlogram_hsv.pkl`
 - `knn_correlogram_hsv.pkl`
-- `rf_correlogram_hsv.pkl`
 - `svm_histogram_hsv.pkl`
 - `svm_correlogram_rgb.pkl`
 - `*.meta.json`: metadata provenance, split file và split dùng để train model
@@ -312,7 +310,6 @@ Kết quả được lưu trong `results/training_results.json` và `results/eva
 | Spatial Correlogram HSV + SVM | 84.5% | 0.8462 | 0.8450 | 0.8442 |
 | Correlogram HSV + SVM | 82.5% | 0.8313 | 0.8250 | 0.8259 |
 | Correlogram HSV + KNN | 78.0% | 0.8233 | 0.7800 | 0.7790 |
-| Correlogram HSV + Random Forest | 84.0% | 0.8430 | 0.8400 | 0.8398 |
 | Histogram HSV + SVM | 78.0% | 0.7798 | 0.7800 | 0.7778 |
 | Correlogram RGB + SVM | 82.0% | 0.8294 | 0.8200 | 0.8188 |
 
@@ -406,3 +403,150 @@ Cách xử lý:
 ## 12. Tham khảo
 
 - Huang et al. (1997), *Image Indexing Using Color Correlograms*, CVPR.
+
+## 13. Kết Quả Thực Nghiệm
+
+Kết quả được lưu trong `results/training_results.json` và `results/evaluation_summary.json` cho thấy:
+
+| Phương pháp | Accuracy | Precision | Recall | F1-score |
+| --- | ---: | ---: | ---: | ---: |
+| Spatial Correlogram HSV + SVM | 84.5% | 0.8462 | 0.8450 | 0.8442 |
+| Correlogram HSV + SVM | 82.5% | 0.8313 | 0.8250 | 0.8259 |
+| Correlogram HSV + KNN | 78.0% | 0.8233 | 0.7800 | 0.7790 |
+| Histogram HSV + SVM | 78.0% | 0.7798 | 0.7800 | 0.7778 |
+| Correlogram RGB + SVM | 82.0% | 0.8294 | 0.8200 | 0.8188 |
+
+Nhận xét nhanh:
+- **Spatial Correlogram HSV + SVM** là cấu hình tốt nhất trong các thí nghiệm hiện có.
+- **Correlogram HSV** cho kết quả tốt hơn **Histogram HSV**, cho thấy thông tin tương quan không gian màu có ích cho bài toán này.
+- Biến thể **RGB** vẫn hoạt động tốt, nhưng kém hơn cấu hình **HSV** tốt nhất.
+
+## 14. Hạn Chế
+
+Dự án hiện tại có các hạn chế sau:
+
+- **Kích thước dataset**: Chỉ sử dụng 1000 ảnh từ 10 lớp Corel-1K. Các dataset lớn hơn (ImageNet, COCO) có thể cải thiện độ tổng quát của mô hình.
+- **Không gian màu**: Chỉ thử nghiệm HSV và RGB. Các không gian màu khác như LAB, YCbCr có thể cung cấp thông tin bổ sung.
+- **Số lượng lớp**: Giới hạn ở 10 lớp. Các bài toán phân lớp với số lượng lớp lớn hơn (100+) có thể yêu cầu kiến trúc mô hình khác.
+- **Độ phức tạp tính toán**: Color Correlogram có độ phức tạp O(H*W*d*8) với d là số khoảng cách. Các dataset lớn hơn hoặc ảnh độ phân giải cao có thể gặp vấn đề hiệu năng.
+- **Mô hình học máy**: Chỉ sử dụng SVM và KNN. Các mô hình học sâu (CNN, ResNet) có thể đạt độ chính xác cao hơn.
+
+## 15. Hướng Phát Triển Tương Lai
+
+Các hướng cải thiện và mở rộng cho dự án:
+
+- **Dataset lớn hơn**: Sử dụng ImageNet, COCO, hoặc các dataset công khai khác để huấn luyện mô hình với khả năng tổng quát hóa tốt hơn.
+- **Học sâu**: Triển khai CNN (VGG, ResNet, EfficientNet) để trích xuất đặc trưng tự động và đạt độ chính xác cao hơn.
+- **Xử lý thời gian thực**: Tối ưu hóa pipeline để xử lý video hoặc stream ảnh từ camera với độ trễ thấp.
+- **Mở rộng không gian màu**: Thử nghiệm LAB, YCbCr, HSL và các không gian màu khác để tìm ra không gian tối ưu cho bài toán.
+- **Kết hợp đặc trưng**: Kết hợp Color Correlogram với các đặc trưng khác (SIFT, ORB, Texture) để cải thiện hiệu suất.
+- **Tìm kiếm ảnh tương tự**: Xây dựng hệ thống tìm kiếm ảnh dựa trên độ tương tự để ứng dụng trong e-commerce, thư viện ảnh.
+- **Triển khai trên thiết bị di động**: Chuyển đổi mô hình sang TensorFlow Lite hoặc ONNX để chạy trên điện thoại thông minh.
+
+## 16. Hướng Dẫn Tái Tạo Kết Quả
+
+Để tái tạo lại toàn bộ kết quả từ đầu, làm theo các bước sau:
+
+### Bước 1: Chuẩn Bị Môi Trường
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd KPDL
+
+# Tạo virtual environment (tùy chọn)
+python -m venv venv
+source venv/bin/activate  # Trên Windows: venv\Scripts\activate
+
+# Cài đặt dependencies
+pip install -r requirements.txt
+```
+
+### Bước 2: Chuẩn Bị Dữ Liệu
+
+Đảm bảo dataset Corel-1K nằm tại `data/corel-1k/` với cấu trúc:
+
+```text
+data/corel-1k/
+├── africans/
+├── beaches/
+├── buildings/
+├── buses/
+├── dinosaurs/
+├── elephants/
+├── flowers/
+├── food/
+├── horses/
+└── mountains/
+```
+
+### Bước 3: Trích Xuất Đặc Trưng
+
+```bash
+python src/feature_extraction.py
+```
+
+Lệnh này sẽ tạo ra các file `.npy` trong `data/features/` và split metadata trong `data/splits/`.
+
+### Bước 4: Huấn Luyện Mô Hình
+
+```bash
+python src/train.py
+```
+
+Lệnh này sẽ huấn luyện 5 mô hình và lưu vào `models/` cùng với metadata `.meta.json`.
+
+### Bước 5: Đánh Giá Mô Hình
+
+```bash
+python src/evaluate.py
+```
+
+Lệnh này sẽ đánh giá các mô hình trên tập test độc lập và lưu kết quả vào `results/`.
+
+### Bước 6: Chạy Ứng Dụng Demo
+
+```bash
+streamlit run app.py
+```
+
+Ứng dụng sẽ mở tại `http://localhost:8501`.
+
+### Bước 7: Chạy Kiểm Tra Chất Lượng Mã
+
+```bash
+# Chạy unit tests
+pytest tests/ --cov=src --cov-report=html
+
+# Kiểm tra type hints
+mypy --strict src/
+
+# Kiểm tra linting
+pylint src/
+
+# Format code
+black src/ app.py
+```
+
+### Bước 8: Xác Minh Tái Tạo
+
+Để xác minh rằng kết quả được tái tạo chính xác:
+
+```bash
+# Chạy pipeline hai lần với cùng seed
+python src/feature_extraction.py
+python src/train.py
+python src/evaluate.py
+
+# Lưu kết quả lần 1
+cp results/evaluation_summary.json results/eval_run1.json
+
+# Chạy lại
+python src/train.py
+python src/evaluate.py
+
+# So sánh kết quả
+diff results/eval_run1.json results/evaluation_summary.json
+```
+
+Nếu hai lần chạy cho kết quả giống nhau, pipeline là tái tạo được.

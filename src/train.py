@@ -15,7 +15,6 @@ from pathlib import Path
 
 import joblib
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
@@ -56,14 +55,6 @@ EXPERIMENTS = [
         'color_space': 'HSV',
         'trainer': 'knn',
         'model_file': 'knn_correlogram_hsv.pkl',
-    },
-    {
-        'name': 'Correlogram_HSV_RF',
-        'feature_key': 'correlogram_hsv',
-        'feature': 'Correlogram',
-        'color_space': 'HSV',
-        'trainer': 'rf',
-        'model_file': 'rf_correlogram_hsv.pkl',
     },
     {
         'name': 'Histogram_HSV_SVM',
@@ -222,52 +213,11 @@ def train_knn(X, y, cv=5, n_jobs=-1):
     }
 
 
-def train_rf(X, y, cv=5):
-    """Huan luyen Random Forest voi GridSearchCV tren train split."""
-    print('\n--- Huan luyen Random Forest ---')
-    pipeline = Pipeline([
-        ('scaler', StandardScaler()),
-        ('rf', RandomForestClassifier(random_state=42)),
-    ])
-
-    param_grid = {
-        'rf__n_estimators': [100, 200],
-        'rf__max_depth': [None, 20, 30],
-        'rf__min_samples_split': [2, 5],
-    }
-
-    grid = GridSearchCV(
-        pipeline,
-        param_grid,
-        cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=42),
-        scoring='accuracy',
-        n_jobs=-1,
-        verbose=1,
-    )
-
-    start = time.time()
-    grid.fit(X, y)
-    elapsed = time.time() - start
-
-    print(f'  Tham so tot nhat: {grid.best_params_}')
-    print(f'  Accuracy (train CV): {grid.best_score_:.4f}')
-    print(f'  Thoi gian: {elapsed:.1f}s')
-
-    return grid.best_estimator_, {
-        'model': 'Random Forest',
-        'best_params': grid.best_params_,
-        'train_cv_accuracy': float(grid.best_score_),
-        'time': elapsed,
-    }
-
-
 def get_trainer(trainer_name):
     if trainer_name == 'svm':
         return train_svm
     if trainer_name == 'knn':
         return train_knn
-    if trainer_name == 'rf':
-        return train_rf
     raise ValueError(f'Khong ho tro trainer: {trainer_name}')
 
 
