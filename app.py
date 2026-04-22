@@ -23,7 +23,6 @@ from dataset_profile import DEFAULT_DATASET_PROFILE
 from dataset_split import load_split_metadata, resolve_split_indices
 from experiment_runner import EVAL_LABELS, run_experiment
 
-
 PROJECT_DIR = Path(__file__).parent
 FEATURES_DIR = PROJECT_DIR / "data" / "features"
 MODELS_DIR = PROJECT_DIR / "models"
@@ -502,7 +501,11 @@ def render_info_card(label, title, body, extra_class=""):
 
 
 def render_prediction_highlight(predicted_class, confidence, level):
-    confidence_text = "Không có xác suất dự đoán." if confidence is None else f"Độ tin cậy: {confidence:.1%}"
+    confidence_text = (
+        "Không có xác suất dự đoán."
+        if confidence is None
+        else f"Độ tin cậy: {confidence:.1%}"
+    )
     st.markdown(
         f"""
         <div class="prediction">
@@ -516,8 +519,14 @@ def render_prediction_highlight(predicted_class, confidence, level):
 
 
 def render_artifact_box(paths):
-    lines = "".join(f"<div class='artifact-path'><code>{escape(str(path))}</code></div>" for path in paths)
-    st.markdown(f"<div class='artifact'><div class='mini-label'>Kết quả đã lưu</div>{lines}</div>", unsafe_allow_html=True)
+    lines = "".join(
+        f"<div class='artifact-path'><code>{escape(str(path))}</code></div>"
+        for path in paths
+    )
+    st.markdown(
+        f"<div class='artifact'><div class='mini-label'>Kết quả đã lưu</div>{lines}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_summary_strip(title, body, primary=False):
@@ -546,7 +555,9 @@ def render_stat_card(label, value, detail=None):
     elif len(value_str) >= 11:
         value_classes.append("is-wide")
     value_class = " ".join(value_classes)
-    detail_html = f"<div class='stat-card-detail'>{escape(detail)}</div>" if detail else ""
+    detail_html = (
+        f"<div class='stat-card-detail'>{escape(detail)}</div>" if detail else ""
+    )
     st.markdown(
         f"""
         <div class="stat-card">
@@ -584,6 +595,7 @@ def normalize_color_for_matplotlib(color_value):
 def plot_feature_chart(feature_vector, title):
     palette = get_theme_palette()
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -598,7 +610,11 @@ def plot_feature_chart(feature_vector, title):
     )
     ax.set_facecolor(palette["chart_bg"])
     fig.patch.set_facecolor(palette["chart_bg"])
-    ax.grid(axis="y", color=normalize_color_for_matplotlib(palette["chart_grid"]), linestyle="--")
+    ax.grid(
+        axis="y",
+        color=normalize_color_for_matplotlib(palette["chart_grid"]),
+        linestyle="--",
+    )
     ax.set_xlabel("Chiều đặc trưng")
     ax.set_ylabel("Giá trị")
     ax.set_title(title)
@@ -649,7 +665,9 @@ def load_model_and_data(color_space):
             split_file = model_metadata.get("split_file")
             if split_file and Path(split_file).exists():
                 split_metadata = load_split_metadata(split_file)
-                split_indices = resolve_split_indices(image_paths, split_metadata["data_dir"], split_metadata)
+                split_indices = resolve_split_indices(
+                    image_paths, split_metadata["data_dir"], split_metadata
+                )
                 retrieval_idx = split_indices["train"]
                 image_paths = image_paths[retrieval_idx]
                 db_features = db_features[retrieval_idx]
@@ -662,7 +680,10 @@ def find_similar_images(query_feat, db_features, image_paths, top_k=3):
 
     distances = cdist([query_feat], db_features, metric="cosine")[0]
     indices = np.argsort(distances)[:top_k]
-    return [(image_paths[i], Path(image_paths[i]).parent.name, distances[i]) for i in indices]
+    return [
+        (image_paths[i], Path(image_paths[i]).parent.name, distances[i])
+        for i in indices
+    ]
 
 
 def render_summary_metrics(summary):
@@ -691,33 +712,71 @@ def render_prediction_tab():
         "Phần này đặt thao tác chính lên đầu: chọn mô hình, upload ảnh, xem kết quả và đối chiếu với ảnh gần nhất trong tập train.",
     )
 
-    color_space_label = st.selectbox("Không gian màu", ["HSV", "RGB"], key="predict_color_space")
+    color_space_label = st.selectbox(
+        "Không gian màu", ["HSV", "RGB"], key="predict_color_space"
+    )
     color_space = color_space_label.lower()
     config = MODEL_CONFIGS[color_space]
     model, class_names, db_data, model_metadata = load_model_and_data(color_space)
     if model is None:
         st.error("Chưa có mô hình hoặc file đặc trưng cần thiết.")
-        st.code("pip install -r requirements.txt\npython src/feature_extraction.py\npython src/train.py\nstreamlit run app.py")
+        st.code(
+            "pip install -r requirements.txt\npython src/feature_extraction.py\npython src/train.py\nstreamlit run app.py"
+        )
         return
 
     top_cols = st.columns([1.15, 0.85])
     with top_cols[0]:
-        uploaded_file = st.file_uploader("Tải lên ảnh cần nhận dạng", type=["jpg", "jpeg", "png", "bmp", "tif", "tiff"], key="predict_upload")
-        st.caption("Hỗ trợ JPG, JPEG, PNG, BMP, TIF. Ảnh sẽ được đưa về 128x128 trước khi trích xuất đặc trưng.")
+        uploaded_file = st.file_uploader(
+            "Tải lên ảnh cần nhận dạng",
+            type=["jpg", "jpeg", "png", "bmp", "tif", "tiff"],
+            key="predict_upload",
+        )
+        st.caption(
+            "Hỗ trợ JPG, JPEG, PNG, BMP, TIF. Ảnh sẽ được đưa về 128x128 trước khi trích xuất đặc trưng."
+        )
         config_cols = st.columns(3)
         if color_space == "hsv":
-            config_cols[0].number_input("H bins", value=config["h_bins"], step=1, disabled=True, key="predict_h_bins")
-            config_cols[1].number_input("S bins", value=config["s_bins"], step=1, disabled=True, key="predict_s_bins")
-            config_cols[2].number_input("V bins", value=config["v_bins"], step=1, disabled=True, key="predict_v_bins")
+            config_cols[0].number_input(
+                "H bins",
+                value=config["h_bins"],
+                step=1,
+                disabled=True,
+                key="predict_h_bins",
+            )
+            config_cols[1].number_input(
+                "S bins",
+                value=config["s_bins"],
+                step=1,
+                disabled=True,
+                key="predict_s_bins",
+            )
+            config_cols[2].number_input(
+                "V bins",
+                value=config["v_bins"],
+                step=1,
+                disabled=True,
+                key="predict_v_bins",
+            )
         else:
-            config_cols[0].number_input("RGB bins", value=config["rgb_bins"], step=1, disabled=True, key="predict_rgb_bins")
+            config_cols[0].number_input(
+                "RGB bins",
+                value=config["rgb_bins"],
+                step=1,
+                disabled=True,
+                key="predict_rgb_bins",
+            )
         st.caption(config["sidebar_message"])
     with top_cols[1]:
         if color_space == "hsv":
-            quantization = f"H={config['h_bins']}, S={config['s_bins']}, V={config['v_bins']}"
+            quantization = (
+                f"H={config['h_bins']}, S={config['s_bins']}, V={config['v_bins']}"
+            )
         else:
             quantization = f"RGB bins = {config['rgb_bins']}"
-        render_summary_strip("Mô hình đang dùng", f"{config['label']} | {quantization}", primary=True)
+        render_summary_strip(
+            "Mô hình đang dùng", f"{config['label']} | {quantization}", primary=True
+        )
         retrieval_note = "Truy hồi trên train split nếu feature và image paths có sẵn."
         if model_metadata:
             retrieval_note = (
@@ -726,29 +785,24 @@ def render_prediction_tab():
                 f"test ở {model_metadata.get('held_out_test_split', 'test')}."
             )
         render_summary_strip("Nguồn gốc thí nghiệm", retrieval_note)
-        render_summary_strip("Phù hợp để demo", "Mô hình học trên 10 lớp Corel-1K, nên ảnh ngoài miền dữ liệu gốc cần được diễn giải thận trọng.")
+        render_summary_strip(
+            "Phù hợp để demo",
+            "Mô hình học trên 10 lớp Corel-1K, nên ảnh ngoài miền dữ liệu gốc cần được diễn giải thận trọng.",
+        )
 
-    aux_cols = st.columns([0.72, 0.28])
-    with aux_cols[0]:
-        with st.expander("Danh sách lớp nhận dạng", expanded=False):
-            for index, name in enumerate(class_names, start=1):
-                st.write(f"{index}. {name}")
-    with aux_cols[1]:
-        if model_metadata and isinstance(model_metadata.get("split_counts"), dict):
-            with st.expander("Chi tiết split", expanded=False):
-                render_metadata_dict(
-                    {
-                        "split_counts": model_metadata.get("split_counts"),
-                        "split_file": model_metadata.get("split_file"),
-                        "retrieval_split": model_metadata.get("retrieval_split"),
-                    }
-                )
+    with st.expander("Danh sách lớp nhận dạng", expanded=False):
+        for index, name in enumerate(class_names, start=1):
+            st.write(f"{index}. {name}")
 
     if uploaded_file is None:
-        st.info("Tải một ảnh bất kỳ để hiển thị vector đặc trưng, lớp dự đoán và gallery ảnh tương tự.")
+        st.info(
+            "Tải một ảnh bất kỳ để hiển thị vector đặc trưng, lớp dự đoán và gallery ảnh tương tự."
+        )
         return
 
-    st.info("Mô hình chỉ học trên 10 lớp của Corel-1K. Ảnh ngoài miền dữ liệu gốc vẫn sẽ bị ép vào lớp gần nhất theo đặc trưng màu sắc.")
+    st.info(
+        "Mô hình chỉ học trên 10 lớp của Corel-1K. Ảnh ngoài miền dữ liệu gốc vẫn sẽ bị ép vào lớp gần nhất theo đặc trưng màu sắc."
+    )
 
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
@@ -769,7 +823,9 @@ def render_prediction_tab():
         )
         prediction = model.predict([feat])
         predicted_class = class_names[prediction[0]]
-        proba = model.predict_proba([feat])[0] if hasattr(model, "predict_proba") else None
+        proba = (
+            model.predict_proba([feat])[0] if hasattr(model, "predict_proba") else None
+        )
 
     render_section_header(
         "Phân tích",
@@ -779,13 +835,21 @@ def render_prediction_tab():
 
     visual_cols = st.columns([0.86, 1.14])
     with visual_cols[0]:
-        st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption="Ảnh sau khi đưa về 128x128", use_container_width=True)
+        st.image(
+            cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
+            caption="Ảnh sau khi đưa về 128x128",
+            use_container_width=True,
+        )
     with visual_cols[1]:
         fig = plot_feature_chart(feat, f"Biểu đồ Color Correlogram ({config['label']})")
         st.pyplot(fig)
 
     confidence = float(proba[prediction[0]]) if proba is not None else None
-    level = "Độ tin cậy cao" if confidence is not None and confidence >= 0.5 else "Cần thận trọng khi diễn giải"
+    level = (
+        "Độ tin cậy cao"
+        if confidence is not None and confidence >= 0.5
+        else "Cần thận trọng khi diễn giải"
+    )
     if confidence is None:
         level = "Không có xác suất"
     render_prediction_highlight(predicted_class, confidence, level)
@@ -796,10 +860,16 @@ def render_prediction_tab():
         for idx, class_index in enumerate(top_indices):
             with rank_cols[idx]:
                 probability = float(proba[class_index])
-                render_info_card(f"Top {idx + 1}", str(class_names[class_index]), f"Xác suất ước tính {probability:.1%}")
+                render_info_card(
+                    f"Top {idx + 1}",
+                    str(class_names[class_index]),
+                    f"Xác suất ước tính {probability:.1%}",
+                )
                 st.progress(probability)
     else:
-        st.info("Mô hình hiện tại không hỗ trợ predict_proba, vì vậy app chỉ hiển thị lớp dự đoán.")
+        st.info(
+            "Mô hình hiện tại không hỗ trợ predict_proba, vì vậy app chỉ hiển thị lớp dự đoán."
+        )
 
     if db_data[0] is not None and db_data[1] is not None:
         render_section_header(
@@ -815,7 +885,11 @@ def render_prediction_tab():
                     sim_img = cv2.imread(path)
                     sim_img = cv2.cvtColor(sim_img, cv2.COLOR_BGR2RGB)
                     with cols[index]:
-                        st.image(sim_img, caption=f"{label} | cosine={distance:.3f}", use_container_width=True)
+                        st.image(
+                            sim_img,
+                            caption=f"{label} | cosine={distance:.3f}",
+                            use_container_width=True,
+                        )
         except Exception as exc:
             st.warning(f"Không thể tìm ảnh tương tự: {exc}")
 
@@ -869,7 +943,11 @@ def render_evaluation_controls():
         format_func=lambda value: EVAL_METHOD_LABELS_VI[value],
         key="eval_method",
     )
-    render_summary_strip("Quy trình", EVAL_METHOD_HINTS[eval_method], primary=(eval_method == "independent_test"))
+    render_summary_strip(
+        "Quy trình",
+        EVAL_METHOD_HINTS[eval_method],
+        primary=(eval_method == "independent_test"),
+    )
 
     top_cols = st.columns(4)
     feature = top_cols[0].selectbox(
@@ -886,7 +964,9 @@ def render_evaluation_controls():
         color = "hsv"
         top_cols[1].markdown("**Không gian màu**  \nHSV (cố định)")
     else:
-        color = top_cols[1].selectbox("Không gian màu", ["hsv", "rgb"], key="eval_color")
+        color = top_cols[1].selectbox(
+            "Không gian màu", ["hsv", "rgb"], key="eval_color"
+        )
     model_name = top_cols[2].selectbox("Mô hình", ["svm", "knn"], key="eval_model")
     top_cols[3].markdown(f"**Lượng giá**  \n{EVAL_METHOD_LABELS_VI[eval_method]}")
 
@@ -966,9 +1046,13 @@ def render_evaluation_controls():
             key="bootstrap_random_state",
         )
     elif eval_method == "leave_one_out":
-        st.caption("Leave-One-Out không cần tham số chia dữ liệu, nhưng thời gian chạy có thể lâu hơn rõ rệt.")
+        st.caption(
+            "Leave-One-Out không cần tham số chia dữ liệu, nhưng thời gian chạy có thể lâu hơn rõ rệt."
+        )
     else:
-        st.caption("Independent Held-out Test dùng split cố định của dự án để phản ánh đúng protocol báo cáo cuối.")
+        st.caption(
+            "Independent Held-out Test dùng split cố định của dự án để phản ánh đúng protocol báo cáo cuối."
+        )
 
     return feature, color, model_name, eval_method, params
 
@@ -1019,7 +1103,9 @@ def render_evaluation_result(result, report_text):
                 {
                     "split_file": result["evaluation_details"].get("split_file"),
                     "split_counts": result["evaluation_details"].get("split_counts"),
-                    "final_training_split": result["evaluation_details"].get("final_training_split"),
+                    "final_training_split": result["evaluation_details"].get(
+                        "final_training_split"
+                    ),
                 }
             )
 
@@ -1065,13 +1151,17 @@ def render_evaluation_tab():
     result = st.session_state.get("experiment_result")
     report_text = st.session_state.get("experiment_report_text")
     if not result or not report_text:
-        st.caption("Chọn cấu hình ở trên và bấm 'Chạy thí nghiệm' để hiển thị metric, report và confusion matrix.")
+        st.caption(
+            "Chọn cấu hình ở trên và bấm 'Chạy thí nghiệm' để hiển thị metric, report và confusion matrix."
+        )
         return
     render_evaluation_result(result, report_text)
 
 
 def main():
-    st.set_page_config(page_title="Color Correlogram - Nhận dạng ảnh", page_icon="🎨", layout="wide")
+    st.set_page_config(
+        page_title="Color Correlogram - Nhận dạng ảnh", page_icon="🎨", layout="wide"
+    )
     sync_theme_state()
     inject_custom_css()
     render_hero()

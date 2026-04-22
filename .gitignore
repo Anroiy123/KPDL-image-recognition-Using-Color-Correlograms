@@ -7,6 +7,7 @@ AGENTS.md
 .mcp.json
 skills/
 docx_work
+image
 
 # Python development artifacts
 __pycache__/

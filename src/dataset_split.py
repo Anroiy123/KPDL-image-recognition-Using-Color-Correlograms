@@ -10,11 +10,18 @@ from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from dataset_profile import (
-    DEFAULT_DATASET_PROFILE,
-    get_profile_config,
-    get_split_filename,
-)
+try:
+    from .dataset_profile import (
+        DEFAULT_DATASET_PROFILE,
+        get_profile_config,
+        get_split_filename,
+    )
+except ImportError:
+    from dataset_profile import (
+        DEFAULT_DATASET_PROFILE,
+        get_profile_config,
+        get_split_filename,
+    )
 
 
 DEFAULT_SPLIT_FILENAME = get_split_filename(DEFAULT_DATASET_PROFILE)
@@ -35,12 +42,16 @@ def _class_distribution(label_names):
     return {str(label): int(count) for label, count in sorted(counts.items())}
 
 
-def build_split_metadata(image_paths, label_names, data_dir,
-                         train_ratio=DEFAULT_TRAIN_RATIO,
-                         val_ratio=DEFAULT_VAL_RATIO,
-                         test_ratio=DEFAULT_TEST_RATIO,
-                         random_state=DEFAULT_RANDOM_STATE,
-                         dataset_name=DEFAULT_DATASET_NAME):
+def build_split_metadata(
+    image_paths,
+    label_names,
+    data_dir,
+    train_ratio=DEFAULT_TRAIN_RATIO,
+    val_ratio=DEFAULT_VAL_RATIO,
+    test_ratio=DEFAULT_TEST_RATIO,
+    random_state=DEFAULT_RANDOM_STATE,
+    dataset_name=DEFAULT_DATASET_NAME,
+):
     """Tao metadata split stratified co dinh."""
     total_ratio = train_ratio + val_ratio + test_ratio
     if not np.isclose(total_ratio, 1.0):
@@ -59,31 +70,35 @@ def build_split_metadata(image_paths, label_names, data_dir,
     )
 
     split_indices = {
-        'train': np.sort(train_idx),
-        'test': np.sort(test_idx),
+        "train": np.sort(train_idx),
+        "test": np.sort(test_idx),
     }
 
     metadata = {
-        'dataset_name': str(dataset_name),
-        'data_dir': Path(data_dir).as_posix(),
-        'random_state': int(random_state),
-        'ratios': {
-            'train': float(train_ratio),
-            'test': float(test_ratio),
+        "dataset_name": str(dataset_name),
+        "data_dir": Path(data_dir).as_posix(),
+        "random_state": int(random_state),
+        "ratios": {
+            "train": float(train_ratio),
+            "test": float(test_ratio),
         },
-        'created_at': datetime.now().isoformat(timespec='seconds'),
-        'path_mode': 'relative_to_data_dir',
-        'splits': {},
-        'counts': {},
-        'class_distribution': {},
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "path_mode": "relative_to_data_dir",
+        "splits": {},
+        "counts": {},
+        "class_distribution": {},
     }
 
     for split_name, split_idx in split_indices.items():
-        rel_paths = [_normalize_relative_path(image_paths[i], data_dir) for i in split_idx]
+        rel_paths = [
+            _normalize_relative_path(image_paths[i], data_dir) for i in split_idx
+        ]
         split_label_names = [str(label_names[i]) for i in split_idx]
-        metadata['splits'][split_name] = rel_paths
-        metadata['counts'][split_name] = int(len(split_idx))
-        metadata['class_distribution'][split_name] = _class_distribution(split_label_names)
+        metadata["splits"][split_name] = rel_paths
+        metadata["counts"][split_name] = int(len(split_idx))
+        metadata["class_distribution"][split_name] = _class_distribution(
+            split_label_names
+        )
 
     return metadata
 
@@ -91,21 +106,26 @@ def build_split_metadata(image_paths, label_names, data_dir,
 def save_split_metadata(split_path, metadata):
     split_path = Path(split_path)
     split_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(split_path, 'w', encoding='utf-8') as f:
+    with open(split_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
 
 
 def load_split_metadata(split_path):
-    with open(split_path, 'r', encoding='utf-8') as f:
+    with open(split_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def create_and_save_split(split_path, image_paths, label_names, data_dir,
-                          train_ratio=DEFAULT_TRAIN_RATIO,
-                          val_ratio=DEFAULT_VAL_RATIO,
-                          test_ratio=DEFAULT_TEST_RATIO,
-                          random_state=DEFAULT_RANDOM_STATE,
-                          dataset_name=DEFAULT_DATASET_NAME):
+def create_and_save_split(
+    split_path,
+    image_paths,
+    label_names,
+    data_dir,
+    train_ratio=DEFAULT_TRAIN_RATIO,
+    val_ratio=DEFAULT_VAL_RATIO,
+    test_ratio=DEFAULT_TEST_RATIO,
+    random_state=DEFAULT_RANDOM_STATE,
+    dataset_name=DEFAULT_DATASET_NAME,
+):
     metadata = build_split_metadata(
         image_paths=image_paths,
         label_names=label_names,
@@ -120,13 +140,18 @@ def create_and_save_split(split_path, image_paths, label_names, data_dir,
     return metadata
 
 
-def ensure_split_metadata(split_path, image_paths, label_names, data_dir,
-                          train_ratio=DEFAULT_TRAIN_RATIO,
-                          val_ratio=DEFAULT_VAL_RATIO,
-                          test_ratio=DEFAULT_TEST_RATIO,
-                          random_state=DEFAULT_RANDOM_STATE,
-                          dataset_name=DEFAULT_DATASET_NAME,
-                          force=False):
+def ensure_split_metadata(
+    split_path,
+    image_paths,
+    label_names,
+    data_dir,
+    train_ratio=DEFAULT_TRAIN_RATIO,
+    val_ratio=DEFAULT_VAL_RATIO,
+    test_ratio=DEFAULT_TEST_RATIO,
+    random_state=DEFAULT_RANDOM_STATE,
+    dataset_name=DEFAULT_DATASET_NAME,
+    force=False,
+):
     """Tai split metadata, neu chua co thi tao moi."""
     split_path = Path(split_path)
     if force or not split_path.exists():
@@ -149,7 +174,7 @@ def validate_split_metadata(split_metadata, expected_dataset_name=None):
     if expected_dataset_name is None:
         return
 
-    actual_name = split_metadata.get('dataset_name')
+    actual_name = split_metadata.get("dataset_name")
     if actual_name and str(actual_name) != str(expected_dataset_name):
         raise ValueError(
             f"Split metadata thuoc dataset '{actual_name}', "
@@ -166,7 +191,7 @@ def resolve_split_indices(image_paths, data_dir, split_metadata):
     }
 
     split_indices = {}
-    for split_name, rel_paths in split_metadata['splits'].items():
+    for split_name, rel_paths in split_metadata["splits"].items():
         indices = []
         missing_paths = []
         for rel_path in rel_paths:

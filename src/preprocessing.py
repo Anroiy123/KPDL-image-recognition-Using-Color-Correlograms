@@ -14,12 +14,16 @@ def _validate_image_array(img: np.ndarray, param_name: str = "img") -> None:
     if not isinstance(img, np.ndarray):
         raise TypeError(f"{param_name} must be numpy array, got {type(img)}")
     if img.ndim != 3:
-        raise ValueError(f"{param_name} must be 3D array (H, W, C), got shape {img.shape}")
+        raise ValueError(
+            f"{param_name} must be 3D array (H, W, C), got shape {img.shape}"
+        )
     if img.shape[2] != 3:
         raise ValueError(f"{param_name} must have 3 channels, got {img.shape[2]}")
 
 
-def _validate_size_tuple(size: Union[Tuple[int, int], List[int]], param_name: str = "size") -> None:
+def _validate_size_tuple(
+    size: Union[Tuple[int, int], List[int]], param_name: str = "size"
+) -> None:
     """Validate size is a valid (width, height) tuple."""
     if not isinstance(size, (tuple, list)) or len(size) != 2:
         raise ValueError(f"{param_name} must be tuple/list of 2 ints, got {size}")
@@ -34,7 +38,9 @@ def _validate_bins(h_bins: int, s_bins: int, v_bins: int) -> None:
             raise ValueError(f"{name} must be positive integer, got {bins}")
 
 
-def load_image(path: Union[str, Path], size: Tuple[int, int] = (128, 128)) -> np.ndarray:
+def load_image(
+    path: Union[str, Path], size: Tuple[int, int] = (128, 128)
+) -> np.ndarray:
     """Doc anh va resize ve kich thuoc dong nhat.
 
     Args:
@@ -79,7 +85,9 @@ def convert_to_hsv(img: np.ndarray) -> np.ndarray:
         raise ValueError(f"Loi chuyen doi BGR->HSV: {e}")
 
 
-def quantize_colors_hsv(img_hsv: np.ndarray, h_bins: int = 8, s_bins: int = 3, v_bins: int = 3) -> Tuple[np.ndarray, int]:
+def quantize_colors_hsv(
+    img_hsv: np.ndarray, h_bins: int = 8, s_bins: int = 3, v_bins: int = 3
+) -> Tuple[np.ndarray, int]:
     """Luong tu hoa mau sac trong khong gian HSV.
 
     Giam so mau tu hang trieu xuong con h_bins * s_bins * v_bins mau.
@@ -149,13 +157,15 @@ def quantize_colors_rgb(img_bgr: np.ndarray, bins: int = 4) -> Tuple[np.ndarray,
     g_q = np.clip(g * bins // 256, 0, bins - 1).astype(np.int32)
     b_q = np.clip(b * bins // 256, 0, bins - 1).astype(np.int32)
 
-    n_colors = bins ** 3
+    n_colors = bins**3
     quantized = r_q * (bins * bins) + g_q * bins + b_q
 
     return quantized, n_colors
 
 
-def load_dataset(data_dir: Union[str, Path], size: Tuple[int, int] = (128, 128)) -> Tuple[List[np.ndarray], List[str], List[str]]:
+def load_dataset(
+    data_dir: Union[str, Path], size: Tuple[int, int] = (128, 128)
+) -> Tuple[List[np.ndarray], List[str], List[str]]:
     """Tai toan bo dataset tu thu muc co cau truc class/image.
 
     Args:
@@ -194,7 +204,7 @@ def load_dataset(data_dir: Union[str, Path], size: Tuple[int, int] = (128, 128))
         class_name = class_dir.name
         # Ho tro nhieu dinh dang anh
         image_files = []
-        for ext in ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tif', '*.tiff']:
+        for ext in ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tif", "*.tiff"]:
             image_files.extend(list(class_dir.glob(ext)))
             image_files.extend(list(class_dir.glob(ext.upper())))
 
@@ -242,43 +252,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         data_dir = sys.argv[1]
     else:
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "corel-1k")
-
-    print(f"Thu muc du lieu: {data_dir}")
-
-    if os.path.exists(data_dir):
-        images, labels, paths = load_dataset(data_dir)
-
-        if len(images) > 0:
-            # Test tien xu ly 1 anh
-            img = images[0]
-            print(f"\nTest anh dau tien: {paths[0]}")
-            print(f"  Kich thuoc: {img.shape}")
-
-            # Test HSV quantization
-            img_hsv = convert_to_hsv(img)
-            q_hsv, n_hsv = quantize_colors_hsv(img_hsv)
-            print(f"  HSV quantized: {q_hsv.shape}, {n_hsv} mau")
-            print(f"  So mau thuc te: {len(np.unique(q_hsv))}")
-
-            # Test RGB quantization
-            q_rgb, n_rgb = quantize_colors_rgb(img)
-            print(f"  RGB quantized: {q_rgb.shape}, {n_rgb} mau")
-            print(f"  So mau thuc te: {len(np.unique(q_rgb))}")
-    else:
-        print(f"Thu muc {data_dir} khong ton tai!")
-        print("Hay tai dataset va dat vao thu muc data/corel-1k/")
-
-
-
-if __name__ == "__main__":
-    # Test nhanh
-    import sys
-
-    if len(sys.argv) > 1:
-        data_dir = sys.argv[1]
-    else:
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "corel-1k")
+        data_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "data", "corel-1k"
+        )
 
     print(f"Thu muc du lieu: {data_dir}")
 

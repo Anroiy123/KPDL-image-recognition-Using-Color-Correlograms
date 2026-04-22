@@ -25,10 +25,12 @@ from sklearn.model_selection import (
 def _basic_metrics(y_true, y_pred):
     """Tinh cac metric co ban va tra ve dict serializable."""
     return {
-        'accuracy': float(accuracy_score(y_true, y_pred)),
-        'precision': float(precision_score(y_true, y_pred, average='macro', zero_division=0)),
-        'recall': float(recall_score(y_true, y_pred, average='macro', zero_division=0)),
-        'f1_score': float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "precision": float(
+            precision_score(y_true, y_pred, average="macro", zero_division=0)
+        ),
+        "recall": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
+        "f1_score": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
     }
 
 
@@ -40,17 +42,21 @@ def evaluate_holdout(train_model_fn, X, y, test_size=0.2, random_state=42):
     model, train_info = train_model_fn(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    return y_test, y_pred, {
-        'method': 'holdout',
-        'test_size': test_size,
-        'random_state': random_state,
-        'split_sizes': {
-            'train': int(len(y_train)),
-            'test': int(len(y_test)),
+    return (
+        y_test,
+        y_pred,
+        {
+            "method": "holdout",
+            "test_size": test_size,
+            "random_state": random_state,
+            "split_sizes": {
+                "train": int(len(y_train)),
+                "test": int(len(y_test)),
+            },
+            "training": train_info,
+            "summary": _basic_metrics(y_test, y_pred),
         },
-        'training': train_info,
-        'summary': _basic_metrics(y_test, y_pred),
-    }
+    )
 
 
 def evaluate_stratified_holdout(train_model_fn, X, y, test_size=0.2, random_state=42):
@@ -66,20 +72,26 @@ def evaluate_stratified_holdout(train_model_fn, X, y, test_size=0.2, random_stat
     model, train_info = train_model_fn(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    return y_test, y_pred, {
-        'method': 'stratified_holdout',
-        'test_size': test_size,
-        'random_state': random_state,
-        'split_sizes': {
-            'train': int(len(y_train)),
-            'test': int(len(y_test)),
+    return (
+        y_test,
+        y_pred,
+        {
+            "method": "stratified_holdout",
+            "test_size": test_size,
+            "random_state": random_state,
+            "split_sizes": {
+                "train": int(len(y_train)),
+                "test": int(len(y_test)),
+            },
+            "training": train_info,
+            "summary": _basic_metrics(y_test, y_pred),
         },
-        'training': train_info,
-        'summary': _basic_metrics(y_test, y_pred),
-    }
+    )
 
 
-def evaluate_repeated_holdout(train_model_fn, X, y, test_size=0.2, n_repeats=10, stratify=True, random_state=42):
+def evaluate_repeated_holdout(
+    train_model_fn, X, y, test_size=0.2, n_repeats=10, stratify=True, random_state=42
+):
     """Danh gia bang repeated hold-out, tong hop metric theo nhieu lan chia."""
     all_true = []
     all_pred = []
@@ -102,39 +114,45 @@ def evaluate_repeated_holdout(train_model_fn, X, y, test_size=0.2, n_repeats=10,
 
         all_true.append(y_test)
         all_pred.append(y_pred)
-        repeat_metrics.append({
-            'repeat': i + 1,
-            'random_state': repeat_state,
-            **_basic_metrics(y_test, y_pred),
-        })
+        repeat_metrics.append(
+            {
+                "repeat": i + 1,
+                "random_state": repeat_state,
+                **_basic_metrics(y_test, y_pred),
+            }
+        )
         training_runs.append(train_info)
 
     y_true = np.concatenate(all_true)
     y_pred = np.concatenate(all_pred)
-    accuracies = [item['accuracy'] for item in repeat_metrics]
-    precisions = [item['precision'] for item in repeat_metrics]
-    recalls = [item['recall'] for item in repeat_metrics]
-    f1_scores = [item['f1_score'] for item in repeat_metrics]
+    accuracies = [item["accuracy"] for item in repeat_metrics]
+    precisions = [item["precision"] for item in repeat_metrics]
+    recalls = [item["recall"] for item in repeat_metrics]
+    f1_scores = [item["f1_score"] for item in repeat_metrics]
 
-    return y_true, y_pred, {
-        'method': 'repeated_holdout',
-        'test_size': test_size,
-        'n_repeats': n_repeats,
-        'stratified': bool(stratify),
-        'random_state': random_state,
-        'training_runs': training_runs,
-        'repeat_metrics': repeat_metrics,
-        'summary': {
-            'accuracy': float(np.mean(accuracies)),
-            'accuracy_std': float(np.std(accuracies)),
-            'precision': float(np.mean(precisions)),
-            'precision_std': float(np.std(precisions)),
-            'recall': float(np.mean(recalls)),
-            'recall_std': float(np.std(recalls)),
-            'f1_score': float(np.mean(f1_scores)),
-            'f1_score_std': float(np.std(f1_scores)),
+    return (
+        y_true,
+        y_pred,
+        {
+            "method": "repeated_holdout",
+            "test_size": test_size,
+            "n_repeats": n_repeats,
+            "stratified": bool(stratify),
+            "random_state": random_state,
+            "training_runs": training_runs,
+            "repeat_metrics": repeat_metrics,
+            "summary": {
+                "accuracy": float(np.mean(accuracies)),
+                "accuracy_std": float(np.std(accuracies)),
+                "precision": float(np.mean(precisions)),
+                "precision_std": float(np.std(precisions)),
+                "recall": float(np.mean(recalls)),
+                "recall_std": float(np.std(recalls)),
+                "f1_score": float(np.mean(f1_scores)),
+                "f1_score_std": float(np.std(f1_scores)),
+            },
         },
-    }
+    )
 
 
 def evaluate_kfold(model, X, y, n_splits=5, stratified=True, random_state=42):
@@ -145,13 +163,17 @@ def evaluate_kfold(model, X, y, n_splits=5, stratified=True, random_state=42):
         cv = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
 
     y_pred = cross_val_predict(clone(model), X, y, cv=cv)
-    return y, y_pred, {
-        'method': 'kfold',
-        'n_splits': n_splits,
-        'stratified': bool(stratified),
-        'random_state': random_state,
-        'summary': _basic_metrics(y, y_pred),
-    }
+    return (
+        y,
+        y_pred,
+        {
+            "method": "kfold",
+            "n_splits": n_splits,
+            "stratified": bool(stratified),
+            "random_state": random_state,
+            "summary": _basic_metrics(y, y_pred),
+        },
+    )
 
 
 def evaluate_leave_one_out(model, X, y):
@@ -159,14 +181,20 @@ def evaluate_leave_one_out(model, X, y):
     cv = LeaveOneOut()
     y_pred = cross_val_predict(clone(model), X, y, cv=cv)
 
-    return y, y_pred, {
-        'method': 'leave_one_out',
-        'n_splits': int(len(y)),
-        'summary': _basic_metrics(y, y_pred),
-    }
+    return (
+        y,
+        y_pred,
+        {
+            "method": "leave_one_out",
+            "n_splits": int(len(y)),
+            "summary": _basic_metrics(y, y_pred),
+        },
+    )
 
 
-def evaluate_bootstrap(train_model_fn, X, y, n_iterations=30, sample_ratio=0.8, random_state=42):
+def evaluate_bootstrap(
+    train_model_fn, X, y, n_iterations=30, sample_ratio=0.8, random_state=42
+):
     """Danh gia bang bootstrap sampling voi out-of-bag test set."""
     rng = np.random.default_rng(random_state)
     n_samples = len(y)
@@ -199,40 +227,46 @@ def evaluate_bootstrap(train_model_fn, X, y, n_iterations=30, sample_ratio=0.8, 
 
         all_true.append(y_test)
         all_pred.append(y_pred)
-        iteration_metrics.append({
-            'iteration': i + 1,
-            'oob_size': int(len(test_indices)),
-            **_basic_metrics(y_test, y_pred),
-        })
+        iteration_metrics.append(
+            {
+                "iteration": i + 1,
+                "oob_size": int(len(test_indices)),
+                **_basic_metrics(y_test, y_pred),
+            }
+        )
         training_runs.append(train_info)
 
     if not all_true:
-        raise ValueError('Khong tao duoc out-of-bag test set hop le cho bootstrap.')
+        raise ValueError("Khong tao duoc out-of-bag test set hop le cho bootstrap.")
 
     y_true = np.concatenate(all_true)
     y_pred = np.concatenate(all_pred)
-    accuracies = [item['accuracy'] for item in iteration_metrics]
-    precisions = [item['precision'] for item in iteration_metrics]
-    recalls = [item['recall'] for item in iteration_metrics]
-    f1_scores = [item['f1_score'] for item in iteration_metrics]
+    accuracies = [item["accuracy"] for item in iteration_metrics]
+    precisions = [item["precision"] for item in iteration_metrics]
+    recalls = [item["recall"] for item in iteration_metrics]
+    f1_scores = [item["f1_score"] for item in iteration_metrics]
 
-    return y_true, y_pred, {
-        'method': 'bootstrap',
-        'n_iterations': n_iterations,
-        'sample_ratio': sample_ratio,
-        'random_state': random_state,
-        'successful_iterations': int(len(iteration_metrics)),
-        'skipped_iterations': int(skipped_iterations),
-        'training_runs': training_runs,
-        'iteration_metrics': iteration_metrics,
-        'summary': {
-            'accuracy': float(np.mean(accuracies)),
-            'accuracy_std': float(np.std(accuracies)),
-            'precision': float(np.mean(precisions)),
-            'precision_std': float(np.std(precisions)),
-            'recall': float(np.mean(recalls)),
-            'recall_std': float(np.std(recalls)),
-            'f1_score': float(np.mean(f1_scores)),
-            'f1_score_std': float(np.std(f1_scores)),
+    return (
+        y_true,
+        y_pred,
+        {
+            "method": "bootstrap",
+            "n_iterations": n_iterations,
+            "sample_ratio": sample_ratio,
+            "random_state": random_state,
+            "successful_iterations": int(len(iteration_metrics)),
+            "skipped_iterations": int(skipped_iterations),
+            "training_runs": training_runs,
+            "iteration_metrics": iteration_metrics,
+            "summary": {
+                "accuracy": float(np.mean(accuracies)),
+                "accuracy_std": float(np.std(accuracies)),
+                "precision": float(np.mean(precisions)),
+                "precision_std": float(np.std(precisions)),
+                "recall": float(np.mean(recalls)),
+                "recall_std": float(np.std(recalls)),
+                "f1_score": float(np.mean(f1_scores)),
+                "f1_score_std": float(np.std(f1_scores)),
+            },
         },
-    }
+    )

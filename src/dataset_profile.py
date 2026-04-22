@@ -4,7 +4,6 @@ dataset_profile.py - Cau hinh profile dataset va helper artifact namespace.
 
 from pathlib import Path
 
-
 DEFAULT_DATASET_PROFILE = "corel-1k"
 
 
@@ -30,8 +29,7 @@ def validate_dataset_profile(profile_key):
 
     available = ", ".join(list_dataset_profiles())
     raise ValueError(
-        f"Dataset profile khong hop le: '{profile_key}'. "
-        f"Ho tro: {available}"
+        f"Dataset profile khong hop le: '{profile_key}'. " f"Ho tro: {available}"
     )
 
 
@@ -73,7 +71,9 @@ def scoped_artifact_path(directory, profile_key, base_name):
     return Path(directory) / scoped_artifact_name(profile_key, base_name)
 
 
-def resolve_scoped_or_legacy_path(directory, profile_key, base_name, allow_legacy_corel=True):
+def resolve_scoped_or_legacy_path(
+    directory, profile_key, base_name, allow_legacy_corel=True
+):
     """
     Tim artifact theo namespace profile. Neu khong co va la corel thi cho phep fallback ten cu.
 
@@ -86,7 +86,11 @@ def resolve_scoped_or_legacy_path(directory, profile_key, base_name, allow_legac
         return scoped_path, False
 
     legacy_path = directory / base_name
-    if allow_legacy_corel and profile_key == DEFAULT_DATASET_PROFILE and legacy_path.exists():
+    if (
+        allow_legacy_corel
+        and profile_key == DEFAULT_DATASET_PROFILE
+        and legacy_path.exists()
+    ):
         return legacy_path, True
 
     return scoped_path, False
