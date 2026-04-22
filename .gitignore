@@ -3,6 +3,10 @@ tiliumnhckhaiphdliuaphngtin
 openspec
 .codex
 AGENTS.md
+.playwright-mcp
+.mcp.json
+skills/
+docx_work
 
 # Python development artifacts
 __pycache__/
@@ -12,6 +16,12 @@ __pycache__/
 .coverage
 htmlcov/
 *.egg-info/
+examples/
+=0.8.11
+.pylintrc
+.mypy.ini
+thesis_generator.py
+test_thesis_generator.py
 
 # ML models and extracted features
 models/**

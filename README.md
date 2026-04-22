@@ -443,7 +443,247 @@ Các hướng cải thiện và mở rộng cho dự án:
 - **Tìm kiếm ảnh tương tự**: Xây dựng hệ thống tìm kiếm ảnh dựa trên độ tương tự để ứng dụng trong e-commerce, thư viện ảnh.
 - **Triển khai trên thiết bị di động**: Chuyển đổi mô hình sang TensorFlow Lite hoặc ONNX để chạy trên điện thoại thông minh.
 
-## 16. Hướng Dẫn Tái Tạo Kết Quả
+## 16. Thesis Document Generator
+
+### Tổng Quan
+
+Thesis Document Generator là một skill Kiro cho phép tạo các tài liệu tiêu luận học thuật định dạng chuẩn Vietnamese dưới dạng DOCX. Skill này tích hợp với thư mục `results/` để tự động đưa các hình ảnh, biểu đồ và ma trận nhầm lẫn vào tài liệu.
+
+### Cài Đặt
+
+Thư viện `python-docx` đã được thêm vào `requirements.txt`. Cài đặt:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Cấu Trúc Module
+
+Module `src/thesis_generator.py` cung cấp ba lớp chính:
+
+1. **ThesisDocument**: Lớp chính quản lý tài liệu, định dạng, và lưu file DOCX
+2. **ThesisChapter**: Đại diện cho một chương với nội dung, hình ảnh, và bảng
+3. **AssetManager**: Quản lý tải hình ảnh từ thư mục `results/`
+
+### Sử Dụng Cơ Bản
+
+#### Tạo Tài Liệu Từ Config Dict
+
+```python
+from src.thesis_generator import ThesisDocument
+
+config = {
+    "title": "Tiêu Luận Khái Phá Dữ Liệu",
+    "chapters": [
+        {
+            "number": 1,
+            "title": "Tổng quan",
+            "content": [
+                {"type": "paragraph", "text": "Đây là nội dung chương 1..."},
+                {"type": "image", "path": "results/cm_model.png", "caption": "Ma trận nhầm lẫn"},
+                {"type": "table", "data": [["Cột 1", "Cột 2"], ["Dữ liệu 1", "Dữ liệu 2"]], "caption": "Bảng kết quả"}
+            ]
+        },
+        {
+            "number": 2,
+            "title": "Cơ sở lý thuyết",
+            "content": [
+                {"type": "paragraph", "text": "Nội dung chương 2..."}
+            ]
+        }
+    ]
+}
+
+doc = ThesisDocument()
+doc.generate_from_config(config)
+doc.save("my_thesis.docx")
+```
+
+#### Tạo Tài Liệu Từng Chương
+
+```python
+from src.thesis_generator import ThesisDocument, ThesisChapter
+
+doc = ThesisDocument("Tiêu Luận Khái Phá Dữ Liệu")
+
+# Chương 1
+chapter1 = ThesisChapter(1, "Tổng quan")
+chapter1.add_paragraph("Đây là nội dung chương 1...")
+chapter1.add_image("results/cm_model.png", "Ma trận nhầm lẫn")
+doc.add_chapter(chapter1)
+
+# Chương 2
+chapter2 = ThesisChapter(2, "Cơ sở lý thuyết")
+chapter2.add_paragraph("Nội dung chương 2...")
+doc.add_chapter(chapter2)
+
+doc.save("my_thesis.docx")
+```
+
+#### Sử Dụng Skill Từ CLI
+
+```bash
+python skills/generate_thesis_doc.py
+```
+
+### Định Dạng Hỗ Trợ
+
+- **Font**: Times New Roman (12pt)
+- **Căn lề**: Justified (căn đều hai bên)
+- **Khoảng cách dòng**: 1.5
+- **Hình ảnh**: Tự động đánh số "Hình X" với chú thích dưới hình, căn giữa
+- **Bảng**: Tự động đánh số "Bảng X" với chú thích trên bảng, căn trái
+- **Hỗ trợ UTF-8**: Đầy đủ hỗ trợ tiếng Việt
+
+### Quản Lý Tài Sản (Asset Manager)
+
+AssetManager tự động quét thư mục `results/` để tìm hình ảnh:
+
+```python
+from src.thesis_generator import AssetManager
+
+manager = AssetManager("results/")
+
+# Liệt kê tất cả hình ảnh
+images = manager.list_available_results()
+print(images)
+
+# Tìm ma trận nhầm lẫn
+matrices = manager.find_confusion_matrices()
+print(matrices)
+
+# Tìm biểu đồ so sánh độ chính xác
+charts = manager.find_accuracy_charts()
+print(charts)
+
+# Tải hình ảnh từ results/
+path = manager.load_result_image("cm_model.png")
+```
+
+### Cấu Trúc Config Chi Tiết
+
+```python
+config = {
+    "title": "Tiêu Luận Khái Phá Dữ Liệu",  # Tiêu đề tài liệu
+    "chapters": [
+        {
+            "number": 1,                      # Số chương
+            "title": "Tổng quan",             # Tiêu đề chương
+            "content": [                      # Nội dung chương
+                {
+                    "type": "paragraph",
+                    "text": "Nội dung đoạn văn..."
+                },
+                {
+                    "type": "image",
+                    "path": "results/image.png",
+                    "caption": "Chú thích hình ảnh",
+                    "width": 5.0                # Chiều rộng inch (tùy chọn, mặc định 5.0)
+                },
+                {
+                    "type": "table",
+                    "data": [
+                        ["Cột 1", "Cột 2", "Cột 3"],
+                        ["Dữ liệu 1", "Dữ liệu 2", "Dữ liệu 3"],
+                        ["Dữ liệu 4", "Dữ liệu 5", "Dữ liệu 6"]
+                    ],
+                    "caption": "Chú thích bảng"
+                }
+            ]
+        }
+    ]
+}
+```
+
+### Ví Dụ Tạo Tiêu Luận 5 Chương
+
+```python
+from src.thesis_generator import ThesisDocument
+
+config = {
+    "title": "Tiêu Luận Khái Phá Dữ Liệu",
+    "chapters": [
+        {
+            "number": 1,
+            "title": "Tổng quan",
+            "content": [
+                {"type": "paragraph", "text": "Chương 1 trình bày tổng quan về khái phá dữ liệu..."}
+            ]
+        },
+        {
+            "number": 2,
+            "title": "Cơ sở lý thuyết",
+            "content": [
+                {"type": "paragraph", "text": "Chương 2 trình bày các khái niệm cơ bản..."}
+            ]
+        },
+        {
+            "number": 3,
+            "title": "Thiết kế và xây dựng hệ thống",
+            "content": [
+                {"type": "paragraph", "text": "Chương 3 trình bày thiết kế hệ thống..."}
+            ]
+        },
+        {
+            "number": 4,
+            "title": "Cài đặt",
+            "content": [
+                {"type": "paragraph", "text": "Chương 4 trình bày chi tiết cài đặt..."}
+            ]
+        },
+        {
+            "number": 5,
+            "title": "Kết luận",
+            "content": [
+                {"type": "paragraph", "text": "Chương 5 trình bày kết luận và hướng phát triển..."}
+            ]
+        }
+    ]
+}
+
+doc = ThesisDocument()
+doc.generate_from_config(config)
+doc.save("thesis_output.docx")
+```
+
+### Xử Lý Lỗi Thường Gặp
+
+#### Không tìm thấy hình ảnh
+
+```
+FileNotFoundError: Image file not found: results/image.png
+```
+
+**Giải pháp**: Kiểm tra đường dẫn hình ảnh tồn tại trong thư mục `results/`
+
+#### Dữ liệu bảng không hợp lệ
+
+```
+ValueError: Table data must be a list of rows (each row is a list of cells)
+```
+
+**Giải pháp**: Đảm bảo dữ liệu bảng là danh sách các hàng, mỗi hàng là danh sách các ô
+
+#### Hình ảnh không hiển thị trong Word
+
+**Giải pháp**: Đảm bảo định dạng hình ảnh là `.png`, `.jpg`, hoặc `.jpeg`
+
+### Kiểm Tra Chất Lượng
+
+Chạy unit tests:
+
+```bash
+pytest tests/test_thesis_generator.py -v
+```
+
+Các test bao gồm:
+- Tạo chương và thêm nội dung
+- Quản lý tài sản từ thư mục results/
+- Tạo tài liệu từ config dict
+- Hỗ trợ UTF-8 tiếng Việt
+- Lưu và mở file DOCX
+
+## 17. Hướng Dẫn Tái Tạo Kết Quả
 
 Để tái tạo lại toàn bộ kết quả từ đầu, làm theo các bước sau:
 
