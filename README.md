@@ -5,7 +5,7 @@
 Mục tiêu chính của repo:
 - Tiền xử lý và chuẩn hóa ảnh đầu vào.
 - Trích xuất đặc trưng **Color Correlogram** và **Color Histogram** để so sánh.
-- Huấn luyện các mô hình **SVM**, **KNN** và **Random Forest**.
+- Huấn luyện các mô hình **SVM** và **KNN**.
 - Đánh giá mô hình bằng nhiều chỉ số và trực quan hóa kết quả.
 - Cung cấp ứng dụng **Streamlit** để thử nhận dạng ảnh trực tiếp.
 
@@ -22,7 +22,7 @@ Pipeline hiện tại của dự án:
    - `Correlogram RGB`: `256` chiều
    - `Histogram HSV`: `72` chiều
 4. Huấn luyện các mô hình học máy với `GridSearchCV`.
-5. Tạo split cố định `train/val/test` để tách riêng dữ liệu huấn luyện, chọn mô hình, và kiểm tra cuối.
+5. Tạo split cố định `train/test` để tách riêng dữ liệu huấn luyện và kiểm tra cuối.
 6. Đánh giá bằng `Accuracy`, `Precision`, `Recall`, `F1-score`, `Classification Report`, `Confusion Matrix` trên tập `test` độc lập.
 7. Chạy demo Streamlit để dự đoán lớp ảnh và tìm ảnh tương tự trong tập không dùng `test` để train model.
 
@@ -32,7 +32,7 @@ Pipeline hiện tại của dự án:
 KPDL/
 ├── data/
 │   ├── corel-1k/                # Dataset Corel-1K, mỗi lớp là một thư mục con
-│   ├── splits/                  # Metadata split train/val/test
+│   ├── splits/                  # Metadata split train/test
 │   └── features/                # Đặc trưng đã trích xuất (.npy)
 ├── models/                      # Model đã huấn luyện (.pkl)
 ├── notebooks/                   # Notebook minh họa và phân tích
@@ -42,7 +42,7 @@ KPDL/
 │   ├── color_correlogram.py     # Cài đặt Color Correlogram
 │   ├── color_histogram.py       # Cài đặt Color Histogram
 │   ├── feature_extraction.py    # Trích xuất đặc trưng cho toàn bộ dataset
-│   ├── train.py                 # Huấn luyện SVM, KNN, Random Forest
+│   ├── train.py                 # Huấn luyện SVM và KNN
 │   └── evaluate.py              # Đánh giá mô hình và lưu biểu đồ
 ├── app.py                       # Ứng dụng Streamlit demo
 ├── requirements.txt             # Danh sách thư viện cần cài
@@ -180,7 +180,7 @@ image_paths.npy     : (1000,)
 - `labels.npy`: nhãn lớp của từng ảnh.
 - `class_names.npy`: danh sách tên lớp.
 - `image_paths.npy`: đường dẫn ảnh gốc, dùng để tìm ảnh tương tự trong demo.
-- `data/splits/corel-1k_split.json`: split cố định `train/val/test` dùng chung cho train, evaluation và app.
+- `data/splits/corel-1k_split.json`: split cố định `train/test` dùng chung cho train, evaluation và app.
 
 ### Bước 3. Huấn luyện mô hình
 
@@ -190,25 +190,22 @@ Chạy:
 python src/train.py
 ```
 
-Script `src/train.py` hiện huấn luyện 6 thí nghiệm:
+Script `src/train.py` hiện huấn luyện 5 thí nghiệm:
 - `Spatial Correlogram HSV + SVM`
 - `Correlogram HSV + SVM`
 - `Correlogram HSV + KNN`
-- `Correlogram HSV + Random Forest`
 - `Histogram HSV + SVM`
 - `Correlogram RGB + SVM`
 
 Workflow của `src/train.py`:
-- Tune hyperparameter chỉ trên `train`
-- Đo tạm trên `val`
-- Refit model cuối trên `train+val`
+- Tune hyperparameter bằng `StratifiedKFold` chỉ trên `train`
+- Lưu model cuối trên toàn bộ `train`
 - Không dùng `test` trong huấn luyện
 
 Model được lưu tại `models/`:
 - `svm_correlogram_hsv_spatial.pkl`
 - `svm_correlogram_hsv.pkl`
 - `knn_correlogram_hsv.pkl`
-- `rf_correlogram_hsv.pkl`
 - `svm_histogram_hsv.pkl`
 - `svm_correlogram_rgb.pkl`
 - `*.meta.json`: metadata provenance, split file và split dùng để train model
@@ -258,7 +255,7 @@ streamlit run app.py
 - Load model `models/svm_correlogram_hsv_spatial.pkl`
 - Load metadata `models/svm_correlogram_hsv_spatial.meta.json`
 - Load `class_names.npy`
-- Load `image_paths.npy` và `correlogram_hsv_spatial.npy` để tìm ảnh tương tự trong split `train+val`
+- Load `image_paths.npy` và `correlogram_hsv_spatial.npy` để tìm ảnh tương tự trong split `train`
 - Cho phép upload ảnh để dự đoán lớp
 - Hiển thị vector đặc trưng Correlogram
 - Hiển thị các ảnh gần nhất trong tập dữ liệu nếu có đủ dữ liệu phụ trợ
@@ -276,7 +273,7 @@ Lưu ý quan trọng:
 Chứa đặc trưng đã trích xuất để tránh phải tính lại từ đầu mỗi lần huấn luyện.
 
 ### `data/splits/`
-Chứa split metadata cố định để đảm bảo train, validation và final test luôn dùng đúng cùng một phép chia dữ liệu.
+Chứa split metadata cố định để đảm bảo train và final test luôn dùng đúng cùng một phép chia dữ liệu.
 
 ### `models/`
 Chứa các model `.pkl` đã huấn luyện. Đây là đầu vào bắt buộc để `app.py` dự đoán được.
@@ -310,12 +307,11 @@ Kết quả được lưu trong `results/training_results.json` và `results/eva
 
 | Phương pháp | Accuracy | Precision | Recall | F1-score |
 | --- | ---: | ---: | ---: | ---: |
-| Spatial Correlogram HSV + SVM | 87.5% | 0.8740 | 0.8750 | 0.8735 |
-| Correlogram HSV + SVM | 85.3% | 0.8560 | 0.8530 | 0.8528 |
-| Correlogram HSV + KNN | 79.8% | 0.8192 | 0.7980 | 0.7926 |
-| Correlogram HSV + Random Forest | 85.2% | 0.8515 | 0.8520 | 0.8498 |
-| Histogram HSV + SVM | 79.5% | 0.7945 | 0.7950 | 0.7931 |
-| Correlogram RGB + SVM | 82.9% | 0.8295 | 0.8290 | 0.8284 |
+| Spatial Correlogram HSV + SVM | 84.5% | 0.8462 | 0.8450 | 0.8442 |
+| Correlogram HSV + SVM | 82.5% | 0.8313 | 0.8250 | 0.8259 |
+| Correlogram HSV + KNN | 78.0% | 0.8233 | 0.7800 | 0.7790 |
+| Histogram HSV + SVM | 78.0% | 0.7798 | 0.7800 | 0.7778 |
+| Correlogram RGB + SVM | 82.0% | 0.8294 | 0.8200 | 0.8188 |
 
 Nhận xét nhanh:
 - **Spatial Correlogram HSV + SVM** là cấu hình tốt nhất trong các thí nghiệm hiện có.
@@ -330,7 +326,7 @@ Các chi tiết chính trong phương pháp hiện tại:
 - Khoảng cách correlogram: `{1, 3, 5, 7}`
 - Vector đặc trưng chính: `1440` chiều (`Spatial Correlogram HSV`)
 - Mô hình demo chính: `SVM`
-- Tách dữ liệu: `train/val/test = 70/15/15`
+- Tách dữ liệu: `train/test = 80/20`
 - Phương pháp đánh giá cuối: `held-out test` trên split cố định
 
 ## 11. Lỗi thường gặp và cách xử lý
@@ -407,3 +403,390 @@ Cách xử lý:
 ## 12. Tham khảo
 
 - Huang et al. (1997), *Image Indexing Using Color Correlograms*, CVPR.
+
+## 13. Kết Quả Thực Nghiệm
+
+Kết quả được lưu trong `results/training_results.json` và `results/evaluation_summary.json` cho thấy:
+
+| Phương pháp | Accuracy | Precision | Recall | F1-score |
+| --- | ---: | ---: | ---: | ---: |
+| Spatial Correlogram HSV + SVM | 84.5% | 0.8462 | 0.8450 | 0.8442 |
+| Correlogram HSV + SVM | 82.5% | 0.8313 | 0.8250 | 0.8259 |
+| Correlogram HSV + KNN | 78.0% | 0.8233 | 0.7800 | 0.7790 |
+| Histogram HSV + SVM | 78.0% | 0.7798 | 0.7800 | 0.7778 |
+| Correlogram RGB + SVM | 82.0% | 0.8294 | 0.8200 | 0.8188 |
+
+Nhận xét nhanh:
+- **Spatial Correlogram HSV + SVM** là cấu hình tốt nhất trong các thí nghiệm hiện có.
+- **Correlogram HSV** cho kết quả tốt hơn **Histogram HSV**, cho thấy thông tin tương quan không gian màu có ích cho bài toán này.
+- Biến thể **RGB** vẫn hoạt động tốt, nhưng kém hơn cấu hình **HSV** tốt nhất.
+
+## 14. Hạn Chế
+
+Dự án hiện tại có các hạn chế sau:
+
+- **Kích thước dataset**: Chỉ sử dụng 1000 ảnh từ 10 lớp Corel-1K. Các dataset lớn hơn (ImageNet, COCO) có thể cải thiện độ tổng quát của mô hình.
+- **Không gian màu**: Chỉ thử nghiệm HSV và RGB. Các không gian màu khác như LAB, YCbCr có thể cung cấp thông tin bổ sung.
+- **Số lượng lớp**: Giới hạn ở 10 lớp. Các bài toán phân lớp với số lượng lớp lớn hơn (100+) có thể yêu cầu kiến trúc mô hình khác.
+- **Độ phức tạp tính toán**: Color Correlogram có độ phức tạp O(H*W*d*8) với d là số khoảng cách. Các dataset lớn hơn hoặc ảnh độ phân giải cao có thể gặp vấn đề hiệu năng.
+- **Mô hình học máy**: Chỉ sử dụng SVM và KNN. Các mô hình học sâu (CNN, ResNet) có thể đạt độ chính xác cao hơn.
+
+## 15. Hướng Phát Triển Tương Lai
+
+Các hướng cải thiện và mở rộng cho dự án:
+
+- **Dataset lớn hơn**: Sử dụng ImageNet, COCO, hoặc các dataset công khai khác để huấn luyện mô hình với khả năng tổng quát hóa tốt hơn.
+- **Học sâu**: Triển khai CNN (VGG, ResNet, EfficientNet) để trích xuất đặc trưng tự động và đạt độ chính xác cao hơn.
+- **Xử lý thời gian thực**: Tối ưu hóa pipeline để xử lý video hoặc stream ảnh từ camera với độ trễ thấp.
+- **Mở rộng không gian màu**: Thử nghiệm LAB, YCbCr, HSL và các không gian màu khác để tìm ra không gian tối ưu cho bài toán.
+- **Kết hợp đặc trưng**: Kết hợp Color Correlogram với các đặc trưng khác (SIFT, ORB, Texture) để cải thiện hiệu suất.
+- **Tìm kiếm ảnh tương tự**: Xây dựng hệ thống tìm kiếm ảnh dựa trên độ tương tự để ứng dụng trong e-commerce, thư viện ảnh.
+- **Triển khai trên thiết bị di động**: Chuyển đổi mô hình sang TensorFlow Lite hoặc ONNX để chạy trên điện thoại thông minh.
+
+## 16. Thesis Document Generator
+
+### Tổng Quan
+
+Thesis Document Generator là một skill Kiro cho phép tạo các tài liệu tiêu luận học thuật định dạng chuẩn Vietnamese dưới dạng DOCX. Skill này tích hợp với thư mục `results/` để tự động đưa các hình ảnh, biểu đồ và ma trận nhầm lẫn vào tài liệu.
+
+### Cài Đặt
+
+Thư viện `python-docx` đã được thêm vào `requirements.txt`. Cài đặt:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Cấu Trúc Module
+
+Module `src/thesis_generator.py` cung cấp ba lớp chính:
+
+1. **ThesisDocument**: Lớp chính quản lý tài liệu, định dạng, và lưu file DOCX
+2. **ThesisChapter**: Đại diện cho một chương với nội dung, hình ảnh, và bảng
+3. **AssetManager**: Quản lý tải hình ảnh từ thư mục `results/`
+
+### Sử Dụng Cơ Bản
+
+#### Tạo Tài Liệu Từ Config Dict
+
+```python
+from src.thesis_generator import ThesisDocument
+
+config = {
+    "title": "Tiêu Luận Khái Phá Dữ Liệu",
+    "chapters": [
+        {
+            "number": 1,
+            "title": "Tổng quan",
+            "content": [
+                {"type": "paragraph", "text": "Đây là nội dung chương 1..."},
+                {"type": "image", "path": "results/cm_model.png", "caption": "Ma trận nhầm lẫn"},
+                {"type": "table", "data": [["Cột 1", "Cột 2"], ["Dữ liệu 1", "Dữ liệu 2"]], "caption": "Bảng kết quả"}
+            ]
+        },
+        {
+            "number": 2,
+            "title": "Cơ sở lý thuyết",
+            "content": [
+                {"type": "paragraph", "text": "Nội dung chương 2..."}
+            ]
+        }
+    ]
+}
+
+doc = ThesisDocument()
+doc.generate_from_config(config)
+doc.save("my_thesis.docx")
+```
+
+#### Tạo Tài Liệu Từng Chương
+
+```python
+from src.thesis_generator import ThesisDocument, ThesisChapter
+
+doc = ThesisDocument("Tiêu Luận Khái Phá Dữ Liệu")
+
+# Chương 1
+chapter1 = ThesisChapter(1, "Tổng quan")
+chapter1.add_paragraph("Đây là nội dung chương 1...")
+chapter1.add_image("results/cm_model.png", "Ma trận nhầm lẫn")
+doc.add_chapter(chapter1)
+
+# Chương 2
+chapter2 = ThesisChapter(2, "Cơ sở lý thuyết")
+chapter2.add_paragraph("Nội dung chương 2...")
+doc.add_chapter(chapter2)
+
+doc.save("my_thesis.docx")
+```
+
+#### Sử Dụng Skill Từ CLI
+
+```bash
+python skills/generate_thesis_doc.py
+```
+
+### Định Dạng Hỗ Trợ
+
+- **Font**: Times New Roman (12pt)
+- **Căn lề**: Justified (căn đều hai bên)
+- **Khoảng cách dòng**: 1.5
+- **Hình ảnh**: Tự động đánh số "Hình X" với chú thích dưới hình, căn giữa
+- **Bảng**: Tự động đánh số "Bảng X" với chú thích trên bảng, căn trái
+- **Hỗ trợ UTF-8**: Đầy đủ hỗ trợ tiếng Việt
+
+### Quản Lý Tài Sản (Asset Manager)
+
+AssetManager tự động quét thư mục `results/` để tìm hình ảnh:
+
+```python
+from src.thesis_generator import AssetManager
+
+manager = AssetManager("results/")
+
+# Liệt kê tất cả hình ảnh
+images = manager.list_available_results()
+print(images)
+
+# Tìm ma trận nhầm lẫn
+matrices = manager.find_confusion_matrices()
+print(matrices)
+
+# Tìm biểu đồ so sánh độ chính xác
+charts = manager.find_accuracy_charts()
+print(charts)
+
+# Tải hình ảnh từ results/
+path = manager.load_result_image("cm_model.png")
+```
+
+### Cấu Trúc Config Chi Tiết
+
+```python
+config = {
+    "title": "Tiêu Luận Khái Phá Dữ Liệu",  # Tiêu đề tài liệu
+    "chapters": [
+        {
+            "number": 1,                      # Số chương
+            "title": "Tổng quan",             # Tiêu đề chương
+            "content": [                      # Nội dung chương
+                {
+                    "type": "paragraph",
+                    "text": "Nội dung đoạn văn..."
+                },
+                {
+                    "type": "image",
+                    "path": "results/image.png",
+                    "caption": "Chú thích hình ảnh",
+                    "width": 5.0                # Chiều rộng inch (tùy chọn, mặc định 5.0)
+                },
+                {
+                    "type": "table",
+                    "data": [
+                        ["Cột 1", "Cột 2", "Cột 3"],
+                        ["Dữ liệu 1", "Dữ liệu 2", "Dữ liệu 3"],
+                        ["Dữ liệu 4", "Dữ liệu 5", "Dữ liệu 6"]
+                    ],
+                    "caption": "Chú thích bảng"
+                }
+            ]
+        }
+    ]
+}
+```
+
+### Ví Dụ Tạo Tiêu Luận 5 Chương
+
+```python
+from src.thesis_generator import ThesisDocument
+
+config = {
+    "title": "Tiêu Luận Khái Phá Dữ Liệu",
+    "chapters": [
+        {
+            "number": 1,
+            "title": "Tổng quan",
+            "content": [
+                {"type": "paragraph", "text": "Chương 1 trình bày tổng quan về khái phá dữ liệu..."}
+            ]
+        },
+        {
+            "number": 2,
+            "title": "Cơ sở lý thuyết",
+            "content": [
+                {"type": "paragraph", "text": "Chương 2 trình bày các khái niệm cơ bản..."}
+            ]
+        },
+        {
+            "number": 3,
+            "title": "Thiết kế và xây dựng hệ thống",
+            "content": [
+                {"type": "paragraph", "text": "Chương 3 trình bày thiết kế hệ thống..."}
+            ]
+        },
+        {
+            "number": 4,
+            "title": "Cài đặt",
+            "content": [
+                {"type": "paragraph", "text": "Chương 4 trình bày chi tiết cài đặt..."}
+            ]
+        },
+        {
+            "number": 5,
+            "title": "Kết luận",
+            "content": [
+                {"type": "paragraph", "text": "Chương 5 trình bày kết luận và hướng phát triển..."}
+            ]
+        }
+    ]
+}
+
+doc = ThesisDocument()
+doc.generate_from_config(config)
+doc.save("thesis_output.docx")
+```
+
+### Xử Lý Lỗi Thường Gặp
+
+#### Không tìm thấy hình ảnh
+
+```
+FileNotFoundError: Image file not found: results/image.png
+```
+
+**Giải pháp**: Kiểm tra đường dẫn hình ảnh tồn tại trong thư mục `results/`
+
+#### Dữ liệu bảng không hợp lệ
+
+```
+ValueError: Table data must be a list of rows (each row is a list of cells)
+```
+
+**Giải pháp**: Đảm bảo dữ liệu bảng là danh sách các hàng, mỗi hàng là danh sách các ô
+
+#### Hình ảnh không hiển thị trong Word
+
+**Giải pháp**: Đảm bảo định dạng hình ảnh là `.png`, `.jpg`, hoặc `.jpeg`
+
+### Kiểm Tra Chất Lượng
+
+Chạy unit tests:
+
+```bash
+pytest tests/test_thesis_generator.py -v
+```
+
+Các test bao gồm:
+- Tạo chương và thêm nội dung
+- Quản lý tài sản từ thư mục results/
+- Tạo tài liệu từ config dict
+- Hỗ trợ UTF-8 tiếng Việt
+- Lưu và mở file DOCX
+
+## 17. Hướng Dẫn Tái Tạo Kết Quả
+
+Để tái tạo lại toàn bộ kết quả từ đầu, làm theo các bước sau:
+
+### Bước 1: Chuẩn Bị Môi Trường
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd KPDL
+
+# Tạo virtual environment (tùy chọn)
+python -m venv venv
+source venv/bin/activate  # Trên Windows: venv\Scripts\activate
+
+# Cài đặt dependencies
+pip install -r requirements.txt
+```
+
+### Bước 2: Chuẩn Bị Dữ Liệu
+
+Đảm bảo dataset Corel-1K nằm tại `data/corel-1k/` với cấu trúc:
+
+```text
+data/corel-1k/
+├── africans/
+├── beaches/
+├── buildings/
+├── buses/
+├── dinosaurs/
+├── elephants/
+├── flowers/
+├── food/
+├── horses/
+└── mountains/
+```
+
+### Bước 3: Trích Xuất Đặc Trưng
+
+```bash
+python src/feature_extraction.py
+```
+
+Lệnh này sẽ tạo ra các file `.npy` trong `data/features/` và split metadata trong `data/splits/`.
+
+### Bước 4: Huấn Luyện Mô Hình
+
+```bash
+python src/train.py
+```
+
+Lệnh này sẽ huấn luyện 5 mô hình và lưu vào `models/` cùng với metadata `.meta.json`.
+
+### Bước 5: Đánh Giá Mô Hình
+
+```bash
+python src/evaluate.py
+```
+
+Lệnh này sẽ đánh giá các mô hình trên tập test độc lập và lưu kết quả vào `results/`.
+
+### Bước 6: Chạy Ứng Dụng Demo
+
+```bash
+streamlit run app.py
+```
+
+Ứng dụng sẽ mở tại `http://localhost:8501`.
+
+### Bước 7: Chạy Kiểm Tra Chất Lượng Mã
+
+```bash
+# Chạy unit tests
+pytest tests/ --cov=src --cov-report=html
+
+# Kiểm tra type hints
+mypy --strict src/
+
+# Kiểm tra linting
+pylint src/
+
+# Format code
+black src/ app.py
+```
+
+### Bước 8: Xác Minh Tái Tạo
+
+Để xác minh rằng kết quả được tái tạo chính xác:
+
+```bash
+# Chạy pipeline hai lần với cùng seed
+python src/feature_extraction.py
+python src/train.py
+python src/evaluate.py
+
+# Lưu kết quả lần 1
+cp results/evaluation_summary.json results/eval_run1.json
+
+# Chạy lại
+python src/train.py
+python src/evaluate.py
+
+# So sánh kết quả
+diff results/eval_run1.json results/evaluation_summary.json
+```
+
+Nếu hai lần chạy cho kết quả giống nhau, pipeline là tái tạo được.

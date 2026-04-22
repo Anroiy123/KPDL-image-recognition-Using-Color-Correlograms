@@ -1,0 +1,36 @@
+[MASTER]
+disable=
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-locals,
+    too-many-branches,
+    too-many-statements,
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    line-too-long,
+    fixme,
+    import-outside-toplevel,
+    broad-exception-caught,
+    duplicate-code,
+    invalid-name,
+    disallowed-name,
+    wrong-import-position,
+    ungrouped-imports,
+    wrong-import-order,
+    unused-import,
+    unused-variable,
+    no-member,
+    catching-non-exception,
+    redefined-outer-name,
+    raise-missing-from,
+    f-string-without-interpolation,
+    superfluous-parens,
+    protected-access,
+
+[FORMAT]
+max-line-length=120
+
+[DESIGN]
+max-attributes=10
+max-args=8

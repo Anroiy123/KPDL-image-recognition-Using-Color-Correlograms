@@ -2,24 +2,24 @@
 
 Evaluation split: test
 Split file: C:\Users\hunga\OneDrive\Desktop\project\KPDL\data\splits\corel-1k_split.json
-Accuracy:  0.8146
-Precision: 0.8178
-Recall:    0.8142
-F1-Score:  0.8143
+Accuracy:  0.8200
+Precision: 0.8294
+Recall:    0.8200
+F1-Score:  0.8188
 
               precision    recall  f1-score   support
 
-    africans       0.72      0.87      0.79        15
-     beaches       0.71      0.67      0.69        15
-   buildings       0.67      0.67      0.67        15
-       buses       0.81      0.87      0.84        15
-   dinosaurs       1.00      1.00      1.00        15
-   elephants       0.85      0.73      0.79        15
-     flowers       1.00      0.88      0.93        16
-        food       0.75      0.80      0.77        15
-      horses       1.00      1.00      1.00        15
-   mountains       0.67      0.67      0.67        15
+    africans       0.78      0.90      0.84        20
+     beaches       0.74      0.70      0.72        20
+   buildings       0.72      0.65      0.68        20
+       buses       0.92      0.60      0.73        20
+   dinosaurs       1.00      1.00      1.00        20
+   elephants       0.79      0.75      0.77        20
+     flowers       0.95      1.00      0.98        20
+        food       0.84      0.80      0.82        20
+      horses       0.95      1.00      0.98        20
+   mountains       0.59      0.80      0.68        20
 
-    accuracy                           0.81       151
-   macro avg       0.82      0.81      0.81       151
-weighted avg       0.82      0.81      0.82       151
+    accuracy                           0.82       200
+   macro avg       0.83      0.82      0.82       200
+weighted avg       0.83      0.82      0.82       200
